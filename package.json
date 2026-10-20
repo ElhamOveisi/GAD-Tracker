@@ -1,0 +1,13 @@
+{
+  "name": "gad-glass-works-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "3D glass panel progress dashboard: IFC model coloured by tracker status, with summary and data checks.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
