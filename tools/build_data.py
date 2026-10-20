@@ -24,10 +24,11 @@ def build_raw(ifc, path):
             if m: raw[int(m.group(1))] = (m.group(2), m.group(3))
     pickle.dump(raw, open(path, 'wb'), protocol=5)
 
-def pack(work):
+def pack(work, out=OUT):
     T = pickle.load(open(os.path.join(work, 'tris.pkl'), 'rb'))
     E = {e['id']: e for e in json.load(open(os.path.join(work, 'elems.json')))}
     ids = [k for k in T if len(T[k])]
+    if not ids: return 0
     allp = np.concatenate([T[k].reshape(-1, 3) for k in ids])
     lo, hi = allp.min(0), allp.max(0); scale = (hi - lo).max() / 65000.0
     vc, tc, P, I, meta = [], [], [], [], []
@@ -45,9 +46,25 @@ def pack(work):
     hdr += struct.pack('<4f', *lo[:3], scale)
     body = np.concatenate(P).tobytes()
     if len(body) % 4: body += b'\0' * (4 - len(body) % 4)
-    open(os.path.join(OUT, 'model.bin'), 'wb').write(gzip.compress(hdr + body + np.concatenate(I).tobytes(), 9))
-    json.dump(meta, open(os.path.join(OUT, 'meta.json'), 'w'), separators=(',', ':'))
+    open(os.path.join(out, 'model.bin'), 'wb').write(gzip.compress(hdr + body + np.concatenate(I).tobytes(), 9))
+    json.dump(meta, open(os.path.join(out, 'meta.json'), 'w'), separators=(',', ':'))
     return len(ids)
+
+def convert_model(ifc, out=OUT, log=print):
+    """IFC -> out/model.bin + out/meta.json. Returns the number of panels."""
+    os.makedirs(out, exist_ok=True)
+    with tempfile.TemporaryDirectory() as work:
+        log('Reading element properties')
+        subprocess.run([sys.executable, os.path.join(HERE, 'parse_props.py'), ifc, os.path.join(work, 'elems.json')], check=True, stdout=subprocess.DEVNULL)
+        log('Reading geometry records')
+        build_raw(ifc, os.path.join(work, 'raw.pkl'))
+        log('Converting geometry')
+        subprocess.run([sys.executable, os.path.join(HERE, 'geom.py')], cwd=work, check=True, stdout=subprocess.DEVNULL)
+        log('Packing')
+        n = pack(work, out)
+    if n == 0:
+        raise SystemExit('No elements with STJV_4D_Activity ID were found in this IFC. Export it with Revit property sets included.')
+    return n
 
 def tracker(xlsx):
     import openpyxl
@@ -77,14 +94,7 @@ if __name__ == '__main__':
     ap.add_argument('ifc'); ap.add_argument('xlsx'); ap.add_argument('--stamp', default=None)
     a = ap.parse_args()
     os.makedirs(OUT, exist_ok=True)
-    with tempfile.TemporaryDirectory() as work:
-        print('Reading element properties…')
-        subprocess.run([sys.executable, os.path.join(HERE, 'parse_props.py'), a.ifc, os.path.join(work, 'elems.json')], check=True)
-        print('Reading geometry records…')
-        build_raw(a.ifc, os.path.join(work, 'raw.pkl'))
-        print('Converting geometry (about a minute)…')
-        subprocess.run([sys.executable, os.path.join(HERE, 'geom.py')], cwd=work, check=True)
-        n = pack(work)
+    n = convert_model(a.ifc)
     t = tracker(a.xlsx)
     stamp = a.stamp or f'Model: {os.path.basename(a.ifc)} · Tracker: {os.path.basename(a.xlsx)}'
     json.dump({'stamp': stamp, 'source': 'Tracker: ' + os.path.basename(a.xlsx)},

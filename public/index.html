@@ -118,6 +118,10 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .savebar .msg{color:var(--muted);flex-basis:100%}
 .hist{margin-top:12px}
+.progress{flex-basis:100%;height:6px;background:var(--line);border-radius:3px;overflow:hidden}
+.progress div{height:100%;width:0;background:var(--focus);transition:width .2s}
+.uploads{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap}
+.uploads label.upload{margin-left:0}
 .hist td button{font:500 12px var(--font-ui)}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
@@ -145,7 +149,22 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     <label for="fStatus">Status<select id="fStatus"></select></label>
     <label for="fSearch">Activity ID<input id="fSearch" type="search" placeholder="e.g. IG5-AT-ST" autocomplete="off"></label>
     <button class="btn" id="reset" type="button">Reset</button>
-    <label class="upload" for="upl"><span class="srcnote" id="srcnote"></span><span class="btn">Load new tracker</span><input id="upl" type="file" accept=".xlsx,.csv"></label>
+    <div class="uploads">
+      <span class="srcnote" id="srcnote"></span>
+      <label class="upload" for="upl"><span class="btn">Load new tracker</span><input id="upl" type="file" accept=".xlsx,.csv"></label>
+      <label class="upload" for="uplIfc" id="uplIfcLabel" hidden><span class="btn">Upload new IFC</span><input id="uplIfc" type="file" accept=".ifc"></label>
+    </div>
+  </div>
+
+  <div class="savebar" id="modelbar" hidden>
+    <span id="modelText"></span>
+    <label for="modelKey" class="srcnote" id="modelKeyLabel">Upload password</label>
+    <input id="modelKey" type="password" autocomplete="current-password">
+    <button class="btn primary" id="modelBtn" type="button">Upload and convert</button>
+    <button class="btn" id="modelCancel" type="button">Cancel</button>
+    <button class="btn primary" id="modelReload" type="button" hidden>Show new model</button>
+    <div class="progress" id="modelProg" hidden><div></div></div>
+    <span class="msg" id="modelMsg"></span>
   </div>
 
   <div class="savebar" id="savebar" hidden>
@@ -219,6 +238,11 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 
   <section id="view-checks" hidden>
     <div class="checks" id="checks"></div>
+    <div class="card hist" id="modelHistCard" hidden>
+      <h2>Model versions <span class="count" id="mhCount">0</span></h2>
+      <p class="srcnote">Every converted IFC is kept, newest first. Restoring switches the 3D view and the checks to that model; nothing is deleted.</p>
+      <div class="tablebox" style="max-height:320px"><table><thead><tr><th>Saved</th><th>IFC file</th><th>Panels</th><th>How</th><th></th></tr></thead><tbody id="mhBody"></tbody></table></div>
+    </div>
     <div class="card hist" id="historyCard">
       <h2>Tracker versions <span class="count" id="histCount">0</span></h2>
       <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Restoring a version saves it as the current tracker; nothing is deleted.</p>
@@ -497,6 +521,43 @@ async function loadHistory(){const card=$("historyCard");if(!SERVER.api){card.hi
     if(!SERVER.persistent)$("histNote").textContent="Warning: this server isn't using a volume, so these versions will be lost on the next redeploy.";
   }catch(e){card.hidden=true;}}
 
+/* ---------- model upload ---------- */
+let MODEL=null; // current model info from the server
+let ifcFile=null, pollT=null;
+function mb(n){return (n/1048576).toFixed(n>1048576*10?0:1)+" MB";}
+function modelBar(text,opts={}){$("modelbar").hidden=false;$("modelText").replaceChildren(...(Array.isArray(text)?text:[text]));
+  for(const id of ["modelKey","modelBtn","modelKeyLabel"])$(id).hidden=!opts.ask;$("modelCancel").hidden=!opts.cancel;$("modelReload").hidden=!opts.reload;
+  $("modelProg").hidden=opts.progress==null;if(opts.progress!=null)$("modelProg").firstChild.style.width=opts.progress+"%";
+  $("modelMsg").textContent=opts.msg||"";}
+$("uplIfc").onchange=e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
+  if(!/\.ifc$/i.test(f.name)){toast("Please choose an .ifc file.");return;}
+  ifcFile=f;$("modelKey").value=getKey();
+  modelBar(["Replace the 3D model with ",el("b",null,f.name)," (",mb(f.size),")? The upload and conversion take a few minutes. The current model stays available under Model versions."],{ask:true,cancel:true});};
+$("modelCancel").onclick=()=>{ifcFile=null;$("modelbar").hidden=true;};
+$("modelReload").onclick=()=>location.reload();
+$("modelBtn").onclick=()=>{if(!ifcFile)return;const key=$("modelKey").value;const f=ifcFile;
+  const x=new XMLHttpRequest();x.open("POST","api/model");x.setRequestHeader("x-upload-key",key);x.setRequestHeader("x-filename",f.name);
+  x.upload.onprogress=ev=>{if(ev.lengthComputable)modelBar(["Uploading ",el("b",null,f.name),` … ${Math.round(100*ev.loaded/ev.total)}%`],{progress:100*ev.loaded/ev.total});};
+  x.onload=()=>{let j={};try{j=JSON.parse(x.responseText);}catch(e){}
+    if(x.status===202){setKey(key);ifcFile=null;pollJob();}
+    else modelBar(["Not uploaded: ",(j.error||("error "+x.status))],{ask:true,cancel:true});};
+  x.onerror=()=>modelBar("The upload stopped (connection lost). Please try again.",{ask:true,cancel:true});
+  modelBar(["Uploading ",el("b",null,f.name)," … 0%"],{progress:0});x.send(f);};
+async function pollJob(first){clearTimeout(pollT);let j;try{j=await (await fetch("api/model/job",{cache:"no-store"})).json();}catch(e){pollT=setTimeout(pollJob,5000);return;}
+  if(j.state==="running"){modelBar(["Converting ",el("b",null,j.file||"IFC"),": ",j.step||"working","… This takes a few minutes; you can keep using the dashboard."],{progress:null});pollT=setTimeout(pollJob,3000);return;}
+  if(first)return; // nothing in progress on page load
+  if(j.state==="done"){modelBar(["New model ready: ",el("b",null,j.file)," with "+fmt(j.panels||0)+" panels."],{reload:true});loadModelHistory();return;}
+  if(j.state==="failed"){modelBar(["Conversion failed for ",el("b",null,j.file||"the IFC"),". ",j.error||""],{cancel:true});return;}}
+async function loadModelHistory(){const card=$("modelHistCard");if(!SERVER.api||!MODEL){card.hidden=true;return;}card.hidden=false;
+  try{const list=await (await fetch("api/model/history",{cache:"no-store"})).json();$("mhCount").textContent=fmt(list.length);const tb=$("mhBody");tb.replaceChildren();
+    for(const v of list){const td=el("td");if(v.id===MODEL.id)td.append(el("span",{class:"srcnote"},"Current"));
+      else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
+        try{const r=await fetch("api/model/"+encodeURIComponent(v.id)+"/restore",{method:"POST",headers:{"x-upload-key":getKey()}});const j=await r.json().catch(()=>({}));
+          if(!r.ok)throw new Error(j.error||("error "+r.status));toast("Switched to the model from "+when(v.savedAt)+". Reloading…");setTimeout(()=>location.reload(),900);}
+        catch(err){toast("Not restored: "+err.message+(getKey()?"":" Save a tracker or upload an IFC once to enter the upload password."));b.disabled=false;}};td.append(b);}
+      tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.panels||0)),el("td",null,{upload:"Uploaded",bundled:"From code"}[v.method]||v.method||""),td));}}
+  catch(e){card.hidden=true;}}
+
 /* ---------- 3D viewer (WebGL2) ---------- */
 let view3d=null;
 function M4(){return new Float32Array([1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1]);}
@@ -506,8 +567,8 @@ function ortho(w,h,n,f){const o=M4();o[0]=2/w;o[5]=2/h;o[10]=-2/(f-n);o[14]=-(f+
 function lookAt(e,c,u){const z=norm(sub(e,c)),x=norm(cross(u,z)),y=cross(z,x);const o=M4();o[0]=x[0];o[4]=x[1];o[8]=x[2];o[1]=y[0];o[5]=y[1];o[9]=y[2];o[2]=z[0];o[6]=z[1];o[10]=z[2];o[12]=-dot(x,e);o[13]=-dot(y,e);o[14]=-dot(z,e);return o;}
 const sub=(a,b)=>[a[0]-b[0],a[1]-b[1],a[2]-b[2]],add=(a,b)=>[a[0]+b[0],a[1]+b[1],a[2]+b[2]],scl=(a,s)=>[a[0]*s,a[1]*s,a[2]*s],dot=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2],cross=(a,b)=>[a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0]],norm=a=>{const l=Math.hypot(...a)||1;return[a[0]/l,a[1]/l,a[2]/l];};
 
-async function decodeGeo(){
-  const res=await fetch("data/model.bin");if(!res.ok)throw new Error("model file not found");let buf=await res.arrayBuffer();
+async function decodeGeo(url){
+  const res=await fetch(url||"data/model.bin");if(!res.ok)throw new Error("model file not found");let buf=await res.arrayBuffer();
   const head=new Uint8Array(buf,0,2);
   if(head[0]===0x1f&&head[1]===0x8b){const s=new Blob([buf]).stream().pipeThrough(new DecompressionStream("gzip"));buf=await new Response(s).arrayBuffer();}
   const u32=new Uint32Array(buf,0,1);const n=u32[0];const vc=new Uint32Array(buf,4,n),tc=new Uint32Array(buf,4+4*n,n);const hdr=new Float32Array(buf,4+8*n,4);
@@ -620,13 +681,17 @@ function createViewer(g){
 {const h=(location.hash||"").slice(1);if(["summary","checks"].includes(h))showView(h);}
 (async()=>{
   try{
-    const [cfg,meta]=await Promise.all(["data/config.json","data/meta.json"].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u+" not found");return r.json();})));
+    const cfg=await fetch("data/config.json").then(r=>r.ok?r.json():{}).catch(()=>({}));
     const tr=await fetchTracker();
-    if(SERVER.api){try{const s=await (await fetch("api/status",{cache:"no-store"})).json();SERVER.uploadsEnabled=!!s.uploadsEnabled;SERVER.persistent=!!s.persistent;}catch(e){}}
-    META=meta;$("stamp").textContent=cfg.stamp||"";currentInfo=tr.info;loadTracker(tr.rows,tr.info?describe(tr.info):(cfg.source||""));loadHistory();
+    if(SERVER.api){try{const s=await (await fetch("api/status",{cache:"no-store"})).json();SERVER.uploadsEnabled=!!s.uploadsEnabled;SERVER.persistent=!!s.persistent;}catch(e){}
+      try{const r=await fetch("api/model",{cache:"no-store"});if(r.ok)MODEL=await r.json();}catch(e){}}
+    const base=MODEL?`api/model/files/${encodeURIComponent(MODEL.id)}/`:"data/";
+    const meta=await fetch(base+"meta.json").then(r=>{if(!r.ok)throw new Error("model data not found");return r.json();});
+    META=meta;$("stamp").textContent=MODEL?`Model: ${MODEL.source} · ${fmt(MODEL.panels||META.length)} panels · loaded ${when(MODEL.savedAt)}`:(cfg.stamp||"");
+    $("uplIfcLabel").hidden=!(SERVER.api&&SERVER.uploadsEnabled);loadModelHistory();pollJob(true);currentInfo=tr.info;loadTracker(tr.rows,tr.info?describe(tr.info):(cfg.source||""));loadHistory();
   }catch(err){$("loading").textContent="Couldn't load the tracker data ("+err.message+").";return;}
   try{
-    const g=await decodeGeo();view3d=createViewer(g);
+    const g=await decodeGeo((MODEL?`api/model/files/${encodeURIComponent(MODEL.id)}/`:"data/")+"model.bin");view3d=createViewer(g);
     view3d.onPick=(p,zoom)=>{if(p<0){select(null);return;}const pn=panels[p];select(pn.row||pn,zoom);};
     applyAll();view3d.fit();$("loading").remove();
     for(const b of document.querySelectorAll(".vtools button[data-v]"))b.onclick=()=>view3d.view(b.dataset.v);

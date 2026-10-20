@@ -5,14 +5,20 @@
 // survive redeploys. Layout inside the storage folder:
 //   tracker.json          current tracker { rows, info }
 //   history/<id>.json     every previous version, never deleted
-//   seed.json             hash of the bundled tracker last applied
+//   seed.json             hashes of the bundled tracker/model last applied
+//   models/<id>/          every model version (model.bin, meta.json, info.json)
+//   models/current.json   which model version is shown
+//   models/job.json       state of the latest IFC conversion
+//   uploads/              IFC files while they are being converted
 //
-// The model geometry (public/data/model.bin, meta.json) ships with the code.
+// The model that ships with the code (public/data/model.bin, meta.json) is copied
+// in as the first model version.
 
 const http = require("http");
 const fs = require("fs");
 const path = require("path");
 const crypto = require("crypto");
+const { spawn } = require("child_process");
 
 const PUBLIC = path.join(__dirname, "public");
 const BUNDLED_TRACKER = path.join(PUBLIC, "data", "tracker.json");
@@ -24,6 +30,14 @@ const STORE =
 const HISTORY = path.join(STORE, "history");
 const CURRENT = path.join(STORE, "tracker.json");
 const SEED = path.join(STORE, "seed.json");
+const MODELS = path.join(STORE, "models");
+const UPLOADS = path.join(STORE, "uploads");
+const MODEL_CURRENT = path.join(MODELS, "current.json");
+const JOB = path.join(MODELS, "job.json");
+const BUNDLED_MODEL = path.join(PUBLIC, "data", "model.bin");
+const BUNDLED_META = path.join(PUBLIC, "data", "meta.json");
+const PYTHON = process.env.PYTHON || "python3";
+const MAX_IFC = 2 * 1024 * 1024 * 1024; // 2 GB
 const PORT = process.env.PORT || 3000;
 const UPLOAD_KEY = process.env.UPLOAD_KEY || "";
 const MAX_BODY = 20 * 1024 * 1024;
@@ -93,7 +107,104 @@ function initStore() {
   } else {
     console.log("Storage: kept existing tracker on the volume");
   }
-  writeAtomic(SEED, JSON.stringify({ hash: bundledHash, at: new Date().toISOString() }));
+  // ----- model -----
+  fs.mkdirSync(MODELS, { recursive: true });
+  fs.mkdirSync(UPLOADS, { recursive: true });
+  for (const d of fs.readdirSync(MODELS)) if (d.endsWith(".tmp")) fs.rmSync(path.join(MODELS, d), { recursive: true, force: true });
+  for (const f of fs.readdirSync(UPLOADS)) fs.rmSync(path.join(UPLOADS, f), { force: true });
+  const modelHash = sha(fs.readFileSync(BUNDLED_META, "utf8")) + sha(fs.readFileSync(BUNDLED_MODEL).toString("base64"));
+  let cfgStamp = "";
+  try { cfgStamp = readJSON(BUNDLED_CONFIG).stamp || ""; } catch {}
+  const modelName = (cfgStamp.match(/Model:\s*([^·(]+)/) || [, "Model in code"])[1].trim();
+  if (!fs.existsSync(MODEL_CURRENT) || (seed && seed.modelHash && seed.modelHash !== modelHash) || (seed && !seed.modelHash && !fs.existsSync(MODEL_CURRENT))) {
+    const id = "m-" + newId();
+    const dir = path.join(MODELS, id);
+    fs.mkdirSync(dir, { recursive: true });
+    fs.copyFileSync(BUNDLED_MODEL, path.join(dir, "model.bin"));
+    fs.copyFileSync(BUNDLED_META, path.join(dir, "meta.json"));
+    const panels = readJSON(BUNDLED_META).length;
+    writeAtomic(path.join(dir, "info.json"), JSON.stringify({ id, source: modelName, savedAt: new Date().toISOString(), panels, method: "bundled" }));
+    writeAtomic(MODEL_CURRENT, JSON.stringify({ id }));
+    console.log("Storage: model from the code set as current (" + id + ")");
+  } else {
+    console.log("Storage: kept current model " + readJSON(MODEL_CURRENT).id);
+  }
+  if (fs.existsSync(JOB)) {
+    const job = readJSON(JOB);
+    if (job.state === "running") writeAtomic(JOB, JSON.stringify({ ...job, state: "failed", error: "The server restarted during the conversion. Please upload the IFC again.", finishedAt: new Date().toISOString() }));
+  }
+  writeAtomic(SEED, JSON.stringify({ hash: bundledHash, modelHash, at: new Date().toISOString() }));
+}
+
+// ---------- model conversion ----------
+const modelInfo = (id) => readJSON(path.join(MODELS, id, "info.json"));
+const currentModel = () => modelInfo(readJSON(MODEL_CURRENT).id);
+const readJob = () => (fs.existsSync(JOB) ? readJSON(JOB) : { state: "idle" });
+const setJob = (j) => writeAtomic(JOB, JSON.stringify(j));
+
+function startConversion(id, ifcPath, filename, sizeBytes) {
+  const tmp = path.join(MODELS, id + ".tmp");
+  fs.mkdirSync(tmp, { recursive: true });
+  const job = { id, state: "running", file: filename, sizeMB: Math.round(sizeBytes / 1e5) / 10, step: "Starting", startedAt: new Date().toISOString() };
+  setJob(job);
+  const child = spawn(PYTHON, [path.join(__dirname, "tools", "build_model.py"), ifcPath, tmp], { stdio: ["ignore", "pipe", "pipe"] });
+  let errTail = "", panels = 0;
+  child.stdout.on("data", (d) => {
+    for (const line of d.toString().split("\n")) {
+      if (line.startsWith("STEP ")) { job.step = line.slice(5).trim(); setJob(job); }
+      if (line.startsWith("PANELS ")) panels = parseInt(line.slice(7), 10) || 0;
+    }
+  });
+  child.stderr.on("data", (d) => { errTail = (errTail + d.toString()).slice(-2000); });
+  const finish = (ok, error) => {
+    fs.rmSync(ifcPath, { force: true });
+    if (ok) {
+      fs.renameSync(tmp, path.join(MODELS, id));
+      writeAtomic(path.join(MODELS, id, "info.json"), JSON.stringify({ id, source: filename, savedAt: new Date().toISOString(), panels, method: "upload", sizeMB: job.sizeMB }));
+      writeAtomic(MODEL_CURRENT, JSON.stringify({ id }));
+      setJob({ ...job, state: "done", step: "Done", panels, finishedAt: new Date().toISOString() });
+      console.log(`Model converted: ${filename}, ${panels} panels (${id})`);
+    } else {
+      fs.rmSync(tmp, { recursive: true, force: true });
+      setJob({ ...job, state: "failed", error, finishedAt: new Date().toISOString() });
+      console.error(`Model conversion failed for ${filename}: ${error}`);
+    }
+  };
+  child.on("error", (e) => finish(false, "The converter couldn't start (" + e.message + "). Is Python installed on the server?"));
+  child.on("close", (code) => {
+    if (code === 0) return finish(true);
+    const lines = errTail.trim().split("\n").filter(Boolean);
+    const last = lines[lines.length - 1] || "unknown error";
+    finish(false, /MemoryError|Killed/.test(errTail) || code === 137 || code === null
+      ? "The server ran out of memory converting this IFC. Give the service more memory in Railway, or export only the glass elements."
+      : last);
+  });
+}
+
+function receiveIFC(req, res) {
+  const filename = String(req.headers["x-filename"] || "model.ifc").replace(/[^\w.\- ()]/g, "_").slice(0, 200);
+  if (!/\.ifc$/i.test(filename)) return send(res, 400, { error: "Please choose an .ifc file." });
+  if (readJob().state === "running") return send(res, 409, { error: "Another IFC is being converted. Try again when it has finished." });
+  const declared = Number(req.headers["content-length"] || 0);
+  if (declared > MAX_IFC) return send(res, 413, { error: "That file is over 2 GB." });
+  const id = "m-" + newId();
+  const ifcPath = path.join(UPLOADS, id + ".ifc");
+  const out = fs.createWriteStream(ifcPath);
+  let size = 0, aborted = false, head = "";
+  req.on("data", (c) => {
+    size += c.length;
+    if (head.length < 64) head += c.toString("latin1", 0, Math.min(c.length, 64));
+    if (size > MAX_IFC && !aborted) { aborted = true; out.destroy(); fs.rmSync(ifcPath, { force: true }); send(res, 413, { error: "That file is over 2 GB." }); req.destroy(); }
+  });
+  req.pipe(out);
+  req.on("aborted", () => { aborted = true; out.destroy(); fs.rmSync(ifcPath, { force: true }); });
+  out.on("finish", () => {
+    if (aborted) return;
+    if (!head.startsWith("ISO-10303-21")) { fs.rmSync(ifcPath, { force: true }); return send(res, 400, { error: "That file isn't an IFC (STEP) file." }); }
+    startConversion(id, ifcPath, filename, size);
+    send(res, 202, { ok: true, id });
+  });
+  out.on("error", (e) => { if (!aborted) { aborted = true; fs.rmSync(ifcPath, { force: true }); send(res, 500, { error: "Couldn't store the upload: " + e.message }); } });
 }
 
 // ---------- validation ----------
@@ -151,6 +262,35 @@ async function api(req, res, p) {
     });
     console.log(`Tracker saved: ${info.rows} rows from ${info.source}`);
     return send(res, 200, { ok: true, info });
+  }
+  if (p === "/api/model" && req.method === "GET") return send(res, 200, currentModel());
+  if (p === "/api/model/job" && req.method === "GET") return send(res, 200, readJob());
+  if (p === "/api/model" && req.method === "POST") {
+    if (!UPLOAD_KEY) { req.resume(); return send(res, 403, { error: "Saving is switched off. Set the UPLOAD_KEY variable in Railway to turn it on." }); }
+    if (!keyOK(req)) { req.resume(); return send(res, 401, { error: "Wrong upload password." }); }
+    return receiveIFC(req, res);
+  }
+  if (p === "/api/model/history" && req.method === "GET") {
+    const list = fs.readdirSync(MODELS, { withFileTypes: true })
+      .filter((d) => d.isDirectory() && !d.name.endsWith(".tmp"))
+      .map((d) => { try { return modelInfo(d.name); } catch { return null; } })
+      .filter(Boolean).sort((a, b) => (a.savedAt < b.savedAt ? 1 : -1));
+    return send(res, 200, list);
+  }
+  const mf = p.match(/^\/api\/model\/files\/(m-[\w-]+)\/(model\.bin|meta\.json)$/);
+  if (mf && req.method === "GET") {
+    const file = path.join(MODELS, mf[1], mf[2]);
+    if (!fs.existsSync(file)) return send(res, 404, { error: "Not found" });
+    res.writeHead(200, { "Content-Type": mf[2].endsWith(".json") ? TYPES[".json"] : TYPES[".bin"], "Content-Length": fs.statSync(file).size, "Cache-Control": "public, max-age=31536000, immutable" });
+    return fs.createReadStream(file).pipe(res);
+  }
+  const mr = p.match(/^\/api\/model\/(m-[\w-]+)\/restore$/);
+  if (mr && req.method === "POST") {
+    if (!UPLOAD_KEY) return send(res, 403, { error: "Saving is switched off. Set the UPLOAD_KEY variable in Railway to turn it on." });
+    if (!keyOK(req)) return send(res, 401, { error: "Wrong upload password." });
+    if (!fs.existsSync(path.join(MODELS, mr[1], "info.json"))) return send(res, 404, { error: "That model version doesn't exist." });
+    writeAtomic(MODEL_CURRENT, JSON.stringify({ id: mr[1] }));
+    return send(res, 200, { ok: true, info: modelInfo(mr[1]) });
   }
   if (p === "/api/history" && req.method === "GET") {
     const list = fs.readdirSync(HISTORY).filter((f) => f.endsWith(".json")).sort().reverse().map((f) => {

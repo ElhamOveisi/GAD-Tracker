@@ -1,0 +1,4 @@
+.git
+storage
+**/__pycache__
+*.ifc
