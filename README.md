@@ -43,7 +43,7 @@ Export the IFC from Revit with Revit property sets included, so `STJV_4D_Activit
 - On the first start with an empty volume, the tracker and model in `public/data/` are copied to the volume.
 - If a changed `public/data/tracker.json` or model is later pushed through GitHub, it's applied on deploy as a new current version (the previous one stays in the version list). If those files don't change, deploys leave the volume alone.
 - Uploaded IFC files are deleted after conversion; only the converted model (about 3 MB each) is kept.
-- The conversion needs about 2 GB of memory for a 250 MB IFC. If it fails with an out-of-memory message, raise the service's memory limit in Railway.
+- The conversion needs about 500 MB of memory for a 250 MB IFC (the file is read from disk, not loaded into memory). If it still fails with an out-of-memory message, raise the service's memory limit in Railway.
 - If no volume is attached, the server logs a warning and keeps data in `./storage`, which is lost on redeploy.
 
 ## Run locally

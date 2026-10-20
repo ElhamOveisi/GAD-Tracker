@@ -1,8 +1,16 @@
-import pickle, re, json, math, collections, sys
-import numpy as np
+"""IFC geometry -> triangles per panel.
 
-raw = pickle.load(open('raw.pkl', 'rb'))
-E = {e['id']: e for e in json.load(open('elems.json'))}
+Usage: python geom.py MODEL.ifc ELEMS.json OUT.pkl
+Reads records on demand through ifcindex (low memory).
+"""
+import os, pickle, re, json, math, collections, sys
+from functools import lru_cache
+import numpy as np
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from ifcindex import IfcFile
+
+raw = None  # IfcFile, set in main
+E = {}
 
 def split(a):
     out, depth, cur, q = [], 0, [], False
@@ -22,10 +30,9 @@ def split(a):
         i += 1
     out.append(''.join(cur).strip()); return out
 
-_args = {}
+@lru_cache(maxsize=200000)
 def args(i):
-    if i not in _args: _args[i] = split(raw[i][1])
-    return _args[i]
+    return split(raw[i][1])
 def typ(i): return raw[i][0]
 def ref(s):
     s = s.strip()
@@ -35,6 +42,7 @@ def nums(s): return [float(x) for x in re.findall(r'[-+]?\d*\.?\d+(?:[eE][-+]?\d
 
 _pt = {}
 def point(i):
+    if len(_pt) > 400000: _pt.clear()
     if i not in _pt:
         v = nums(args(i)[0]);
         while len(v) < 3: v.append(0.0)
@@ -270,10 +278,12 @@ def elem_tris(eid):
     return tris
 
 if __name__ == '__main__':
+    ifc_path, elems_path, out_path = sys.argv[1:4]
+    raw = IfcFile(ifc_path)
+    E = {e['id']: e for e in json.load(open(elems_path))}
     agg = collections.defaultdict(list)
-    for i, (t, s) in raw.items():
-        if t == 'IFCRELAGGREGATES':
-            sa = split(s); agg[ref(sa[4])] += reflist(sa[5])
+    for parent, kids in raw.aggregates:
+        agg[parent] += kids
     A = [e for e in E.values() if e['props'].get('STJV_4D_Activity ID')]
     out = {}; errs = collections.Counter(); errex = {}
     for k, e in enumerate(A):
@@ -288,5 +298,5 @@ if __name__ == '__main__':
             out[e['id']] = np.zeros((0, 9))
         if k % 1000 == 0: print(k, flush=True)
     print(errs, errex)
-    pickle.dump(out, open('tris.pkl', 'wb'), protocol=5)
+    pickle.dump(out, open(out_path, 'wb'), protocol=5)
     tot = sum(len(v) for v in out.values()); print('triangles', tot)

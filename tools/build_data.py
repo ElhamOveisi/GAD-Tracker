@@ -12,18 +12,6 @@ import numpy as np
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, '..', 'public', 'data')
 
-def build_raw(ifc, path):
-    rx = re.compile(r'^#(\d+)\s*=\s*([A-Z0-9_]+)\((.*)\);\s*$', re.S)
-    raw, buf = {}, ''
-    with open(ifc, encoding='latin-1') as fh:
-        for line in fh:
-            buf += line
-            if not buf.rstrip().endswith(';'): continue
-            s = buf.strip(); buf = ''
-            m = rx.match(s)
-            if m: raw[int(m.group(1))] = (m.group(2), m.group(3))
-    pickle.dump(raw, open(path, 'wb'), protocol=5)
-
 def pack(work, out=OUT):
     T = pickle.load(open(os.path.join(work, 'tris.pkl'), 'rb'))
     E = {e['id']: e for e in json.load(open(os.path.join(work, 'elems.json')))}
@@ -56,10 +44,8 @@ def convert_model(ifc, out=OUT, log=print):
     with tempfile.TemporaryDirectory() as work:
         log('Reading element properties')
         subprocess.run([sys.executable, os.path.join(HERE, 'parse_props.py'), ifc, os.path.join(work, 'elems.json')], check=True, stdout=subprocess.DEVNULL)
-        log('Reading geometry records')
-        build_raw(ifc, os.path.join(work, 'raw.pkl'))
         log('Converting geometry')
-        subprocess.run([sys.executable, os.path.join(HERE, 'geom.py')], cwd=work, check=True, stdout=subprocess.DEVNULL)
+        subprocess.run([sys.executable, os.path.join(HERE, 'geom.py'), ifc, os.path.join(work, 'elems.json'), os.path.join(work, 'tris.pkl')], check=True, stdout=subprocess.DEVNULL)
         log('Packing')
         n = pack(work, out)
     if n == 0:
