@@ -252,7 +252,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 
 <script>
 "use strict";
-const STATUSES=[["Installed","#2e9e5b"],["Bonded","#3b7dd8"],["Delivery to bond","#e8892b"],["Delivered","#b07ad9"],["Fabricated","#5b5fc7"],["Released for fabr","#45bcd2"],["Broken","#c8423b"],["No status","#7a5a48"]];
+const STATUSES=[["Installed","#2e9e5b"],["Delivered","#b07ad9"],["Bonded","#3b7dd8"],["Delivery to bond","#e8892b"],["Fabricated","#5b5fc7"],["Released for fabr","#45bcd2"],["Broken","#c8423b"],["No status","#7a5a48"]];
 const NOT_IN_TRACKER=["Not in tracker","#e0609b"];
 const COLOR=Object.fromEntries([...STATUSES,NOT_IN_TRACKER]);
 const ORDER=[...STATUSES.map(s=>s[0]),NOT_IN_TRACKER[0]];
@@ -351,7 +351,9 @@ function drawDonut(counts,total){
 const TABLE_MAX=1500;
 function drawTable(rows,extra){
   const tb=$("tbody");tb.replaceChildren();
-  const list=[...rows.map(r=>({id:r.id,status:r.status,sub:r.sub,sqm:r.sqm,row:r})),...extra.map(p=>({id:p.aid,status:NOT_IN_TRACKER[0],sub:p.note||"—",sqm:null,panel:p}))];
+  const rank=s=>{const i=ORDER.indexOf(s);return i<0?ORDER.length:i;};
+  const list=[...rows.map(r=>({id:r.id,status:r.status,sub:r.sub,sqm:r.sqm,row:r})),...extra.map(p=>({id:p.aid,status:NOT_IN_TRACKER[0],sub:p.note||"—",sqm:null,panel:p}))]
+    .sort((a,b)=>rank(a.status)-rank(b.status)||a.id.localeCompare(b.id,undefined,{numeric:true}));
   $("tCount").textContent=fmt(list.length);
   const frag=document.createDocumentFragment();
   for(const it of list.slice(0,TABLE_MAX)){
