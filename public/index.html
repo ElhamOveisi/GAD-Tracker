@@ -169,7 +169,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 
   <div class="savebar" id="savebar" hidden>
     <span id="saveText"></span>
-    <label for="saveKey" class="srcnote">Upload password</label>
+    <label for="saveKey" class="srcnote" id="saveKeyLabel">Upload password</label>
     <input id="saveKey" type="password" autocomplete="current-password">
     <button class="btn primary" id="saveBtn" type="button">Save for everyone</button>
     <button class="btn" id="discardBtn" type="button">Discard</button>
@@ -493,16 +493,15 @@ function showSaveBar(){const b=$("savebar");$("saveMsg").textContent="";
     for(const id of ["saveKey","saveBtn"])$(id).hidden=true;for(const l of b.querySelectorAll("label"))l.hidden=true;return;}
   if(!SERVER.uploadsEnabled){b.hidden=false;$("saveText").replaceChildren(el("b",null,fmt(pending.rows.length)+" rows")," from "+pending.filename+" are shown in this browser only. Saving is switched off until UPLOAD_KEY is set in Railway.");
     for(const id of ["saveKey","saveBtn"])$(id).hidden=true;for(const l of b.querySelectorAll("label"))l.hidden=true;return;}
-  for(const id of ["saveKey","saveBtn"])$(id).hidden=false;for(const l of b.querySelectorAll("label"))l.hidden=false;
-  $("saveKey").value=getKey();
+  $("saveBtn").hidden=false;const ask=!getKey();$("saveKey").hidden=!ask;$("saveKeyLabel").hidden=!ask;$("saveKey").value="";
   $("saveText").replaceChildren("Previewing ",el("b",null,fmt(pending.rows.length)+" rows")," from "+pending.filename+". Save it to update the dashboard for everyone.");
   b.hidden=false;}
-async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":$("saveKey").value||getKey()},body:JSON.stringify(body||{})});
-  let j={};try{j=await r.json();}catch(e){}if(!r.ok)throw new Error(j.error||("Error "+r.status));return j;}
+async function post(url,body,key){key=key||getKey();const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":key},body:JSON.stringify(body||{})});
+  let j={};try{j=await r.json();}catch(e){}if(r.status===401)setKey("");if(!r.ok)throw new Error(j.error||("Error "+r.status));if(key)setKey(key);return j;}
 $("saveBtn").onclick=async()=>{if(!pending)return;const btn=$("saveBtn");btn.disabled=true;$("saveMsg").textContent="Saving…";
-  try{const j=await post("api/tracker",{rows:pending.rows,filename:pending.filename});setKey($("saveKey").value);
+  try{const j=await post("api/tracker",{rows:pending.rows,filename:pending.filename},$("saveKey").value||getKey());
     currentInfo=j.info;$("srcnote").textContent=describe(j.info);pending=null;$("savebar").hidden=true;toast("Saved. Everyone now sees this tracker.");loadHistory();}
-  catch(err){$("saveMsg").textContent="Not saved: "+err.message;}finally{btn.disabled=false;}};
+  catch(err){if(!getKey()){$("saveKey").hidden=false;$("saveKeyLabel").hidden=false;}$("saveMsg").textContent="Not saved: "+err.message;}finally{btn.disabled=false;}};
 $("discardBtn").onclick=async()=>{pending=null;$("savebar").hidden=true;await reloadTracker();toast("Back to the saved tracker.");};
 async function fetchTracker(){
   try{const r=await fetch("api/tracker",{cache:"no-store"});if(r.ok){const j=await r.json();if(j&&Array.isArray(j.rows)){SERVER.api=true;return {rows:j.rows,info:j.info};}}}catch(e){}
@@ -515,8 +514,8 @@ async function loadHistory(){const card=$("historyCard");if(!SERVER.api){card.hi
       const how={upload:"Uploaded",bundled:"From code",restore:"Restored"}[v.method]||v.method||"";
       const td=el("td");if(cur)td.append(el("span",{class:"srcnote"},"Current"));
       else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
-        try{if(!$("saveKey").value)$("saveKey").value=getKey();const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore");await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}
-        catch(err){toast("Not restored: "+err.message+(getKey()?"":" Load a tracker once to enter the upload password."));b.disabled=false;}};td.append(b);}
+        try{const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore");await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}
+        catch(err){toast("Not restored: "+err.message+(getKey()?"":" Save a tracker or upload an IFC once to enter the upload password."));b.disabled=false;}};td.append(b);}
       tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.rows||0)),el("td",null,how),td));}
     if(!SERVER.persistent)$("histNote").textContent="Warning: this server isn't using a volume, so these versions will be lost on the next redeploy.";
   }catch(e){card.hidden=true;}}
@@ -526,20 +525,21 @@ let MODEL=null; // current model info from the server
 let ifcFile=null, pollT=null;
 function mb(n){return (n/1048576).toFixed(n>1048576*10?0:1)+" MB";}
 function modelBar(text,opts={}){$("modelbar").hidden=false;$("modelText").replaceChildren(...(Array.isArray(text)?text:[text]));
-  for(const id of ["modelKey","modelBtn","modelKeyLabel"])$(id).hidden=!opts.ask;$("modelCancel").hidden=!opts.cancel;$("modelReload").hidden=!opts.reload;
+  $("modelBtn").hidden=!opts.ask;const askKey=!!opts.ask&&!getKey();$("modelKey").hidden=!askKey;$("modelKeyLabel").hidden=!askKey;$("modelCancel").hidden=!opts.cancel;$("modelReload").hidden=!opts.reload;
   $("modelProg").hidden=opts.progress==null;if(opts.progress!=null)$("modelProg").firstChild.style.width=opts.progress+"%";
   $("modelMsg").textContent=opts.msg||"";}
 $("uplIfc").onchange=e=>{const f=e.target.files[0];e.target.value="";if(!f)return;
   if(!/\.ifc$/i.test(f.name)){toast("Please choose an .ifc file.");return;}
-  ifcFile=f;$("modelKey").value=getKey();
+  ifcFile=f;$("modelKey").value="";
   modelBar(["Replace the 3D model with ",el("b",null,f.name)," (",mb(f.size),")? The upload and conversion take a few minutes. The current model stays available under Model versions."],{ask:true,cancel:true});};
 $("modelCancel").onclick=()=>{ifcFile=null;$("modelbar").hidden=true;};
 $("modelReload").onclick=()=>location.reload();
-$("modelBtn").onclick=()=>{if(!ifcFile)return;const key=$("modelKey").value;const f=ifcFile;
+$("modelBtn").onclick=()=>{if(!ifcFile)return;const key=$("modelKey").value||getKey();const f=ifcFile;
   const x=new XMLHttpRequest();x.open("POST","api/model");x.setRequestHeader("x-upload-key",key);x.setRequestHeader("x-filename",f.name);
   x.upload.onprogress=ev=>{if(ev.lengthComputable)modelBar(["Uploading ",el("b",null,f.name),` … ${Math.round(100*ev.loaded/ev.total)}%`],{progress:100*ev.loaded/ev.total});};
   x.onload=()=>{let j={};try{j=JSON.parse(x.responseText);}catch(e){}
     if(x.status===202){setKey(key);ifcFile=null;pollJob();}
+    else if(x.status===401){setKey("");modelBar(["Not uploaded: wrong upload password. Enter it again."],{ask:true,cancel:true});}
     else modelBar(["Not uploaded: ",(j.error||("error "+x.status))],{ask:true,cancel:true});};
   x.onerror=()=>modelBar("The upload stopped (connection lost). Please try again.",{ask:true,cancel:true});
   modelBar(["Uploading ",el("b",null,f.name)," … 0%"],{progress:0});x.send(f);};
