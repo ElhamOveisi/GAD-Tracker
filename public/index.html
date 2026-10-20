@@ -10,29 +10,27 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600&display=swap">
 <style>
-/* Layout: site-office control board — header strip, filter rail, viewer + side ledger; summary is a progress matrix by area */
+/* Layout: site-office control board — navy header band, filter rail, viewer + side ledger; summary is a progress matrix by area.
+   Theme: white and dark navy, one deliberate light look in every viewer setting. */
 :root{
-  --bg:#eef1f4; --panel:#ffffff; --ink:#18222d; --muted:#5d6b78; --line:#d6dde4; --soft:#f5f7f9;
-  --accent:#1f4e79; --accent-ink:#ffffff; --focus:#2f7fd1; --viewer:#e4e9ee; --ghost:#9aa6b2;
+  --bg:#ffffff; --panel:#ffffff; --ink:#0b1f3a; --muted:#56657a; --line:#d8dfe9; --soft:#f2f5f9;
+  --navy:#0b1f3a; --navy-2:#13305a; --on-navy:#ffffff; --on-navy-muted:#b9c6d8;
+  --accent:#0b1f3a; --accent-ink:#ffffff; --focus:#2c5aa0; --viewer:#f3f6fa; --ghost:#8d9db3;
   --font-ui:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;
   --font-head:"IBM Plex Sans Condensed","IBM Plex Sans",system-ui,sans-serif;
   --font-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,Consolas,monospace;
 }
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0f151b; --panel:#17202a; --ink:#e3e9ef; --muted:#93a1ae; --line:#2a3642; --soft:#1d2833;
-  --accent:#6fa8dc; --accent-ink:#0f151b; --focus:#7fb6ea; --viewer:#121a22; --ghost:#5d6b78; color-scheme:dark}}
-:root[data-theme="dark"]{
-  --bg:#0f151b; --panel:#17202a; --ink:#e3e9ef; --muted:#93a1ae; --line:#2a3642; --soft:#1d2833;
-  --accent:#6fa8dc; --accent-ink:#0f151b; --focus:#7fb6ea; --viewer:#121a22; --ghost:#5d6b78; color-scheme:dark}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 24px;display:flex;flex-direction:column;gap:12px;max-width:1700px;margin:0 auto}
-header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;justify-content:space-between}
+header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;justify-content:space-between;background:var(--navy);color:var(--on-navy);border-radius:8px;padding:14px 18px}
 header.top h1{font-family:var(--font-head);font-weight:600;font-size:22px;margin:0;letter-spacing:.01em;text-wrap:balance}
-header.top .stamp{color:var(--muted);font-size:12px}
-nav.tabs{display:flex;gap:4px;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:4px}
-nav.tabs button{font:500 13px var(--font-ui);border:0;background:transparent;color:var(--ink);padding:7px 14px;border-radius:5px;cursor:pointer}
-nav.tabs button[aria-selected="true"]{background:var(--accent);color:var(--accent-ink)}
+header.top .stamp{color:var(--on-navy-muted);font-size:12px}
+nav.tabs{display:flex;gap:4px;background:var(--navy-2);border-radius:8px;padding:4px}
+nav.tabs button{font:500 13px var(--font-ui);border:0;background:transparent;color:var(--on-navy);padding:7px 14px;border-radius:5px;cursor:pointer}
+nav.tabs button:hover{background:rgba(255,255,255,.08)}
+nav.tabs button[aria-selected="true"]{background:var(--on-navy);color:var(--navy)}
+header.top button:focus-visible{outline-color:var(--on-navy)}
 button:focus-visible,select:focus-visible,input:focus-visible,label.upload:focus-within{outline:2px solid var(--focus);outline-offset:2px}
 .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
 .filters label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -66,6 +64,7 @@ section[hidden]{display:none!important}
 .loading{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);font-size:14px}
 .side{display:flex;flex-direction:column;gap:12px;min-width:0}
 .card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:12px 14px;min-width:0}
+.card{box-shadow:0 1px 2px rgba(11,31,58,.05)}
 .card h2{font:600 15px var(--font-head);margin:0 0 10px;letter-spacing:.01em}
 .kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px}
 .kpi{background:var(--soft);border-radius:6px;padding:9px 11px;display:flex;flex-direction:column;gap:2px}
@@ -123,7 +122,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .uploads{display:flex;gap:8px;margin-left:auto;align-items:center;flex-wrap:wrap}
 .uploads label.upload{margin-left:0}
 .hist td button{font:500 12px var(--font-ui)}
-.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:20}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--navy);color:var(--on-navy);padding:8px 14px;border-radius:6px;font-size:13px;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
 </head>
