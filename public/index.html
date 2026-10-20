@@ -112,6 +112,13 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
 .checks .card p{margin:0 0 8px;color:var(--muted);font-size:13px;max-width:65ch}
 .count{font:600 13px var(--font-ui);background:var(--soft);border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--ink)}
+.savebar{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;background:var(--panel);border:1px solid var(--focus);border-radius:8px;padding:10px 14px;font-size:13px}
+.savebar b{font-weight:600}
+.savebar input{font:14px var(--font-ui);color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:6px 8px;min-width:0;width:180px;max-width:100%}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.savebar .msg{color:var(--muted);flex-basis:100%}
+.hist{margin-top:12px}
+.hist td button{font:500 12px var(--font-ui)}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:6px;font-size:13px;z-index:20}
 @media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
 </style>
@@ -139,6 +146,15 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     <label for="fSearch">Activity ID<input id="fSearch" type="search" placeholder="e.g. IG5-AT-ST" autocomplete="off"></label>
     <button class="btn" id="reset" type="button">Reset</button>
     <label class="upload" for="upl"><span class="srcnote" id="srcnote"></span><span class="btn">Load new tracker</span><input id="upl" type="file" accept=".xlsx,.csv"></label>
+  </div>
+
+  <div class="savebar" id="savebar" hidden>
+    <span id="saveText"></span>
+    <label for="saveKey" class="srcnote">Upload password</label>
+    <input id="saveKey" type="password" autocomplete="current-password">
+    <button class="btn primary" id="saveBtn" type="button">Save for everyone</button>
+    <button class="btn" id="discardBtn" type="button">Discard</button>
+    <span class="msg" id="saveMsg"></span>
   </div>
 
   <section id="view-model">
@@ -203,6 +219,11 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 
   <section id="view-checks" hidden>
     <div class="checks" id="checks"></div>
+    <div class="card hist" id="historyCard">
+      <h2>Tracker versions <span class="count" id="histCount">0</span></h2>
+      <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Restoring a version saves it as the current tracker; nothing is deleted.</p>
+      <div class="tablebox" style="max-height:320px"><table><thead><tr><th>Saved</th><th>File</th><th>Rows</th><th>How</th><th></th></tr></thead><tbody id="histBody"></tbody></table></div>
+    </div>
   </section>
 </div>
 
@@ -433,8 +454,48 @@ function toTrackerRows(grid){const h=(grid[0]||[]).map(x=>String(x||"").trim().t
   if(!rows.length)throw new Error("No rows with an Activity ID found.");return rows;}
 $("upl").onchange=async e=>{const f=e.target.files[0];if(!f)return;
   try{const buf=await f.arrayBuffer();const grid=/\.csv$/i.test(f.name)?parseCSV(new TextDecoder().decode(buf)):await readXlsx(buf);
-    const rows=toTrackerRows(grid);select(null);loadTracker(rows,`Tracker: ${f.name} (loaded in this browser)`);toast(`Loaded ${fmt(rows.length)} rows from ${f.name}`);}
+    const rows=toTrackerRows(grid);select(null);loadTracker(rows,`Tracker: ${f.name} (preview, not saved)`);toast(`Loaded ${fmt(rows.length)} rows from ${f.name}`);
+    pending={rows,filename:f.name};showSaveBar();}
   catch(err){toast("Couldn't read that file. "+err.message);} e.target.value="";};
+
+/* ---------- server storage ---------- */
+let SERVER={api:false,uploadsEnabled:false,persistent:false}; let pending=null; let currentInfo=null;
+function getKey(){try{return localStorage.getItem("gwt-key")||"";}catch(e){return "";}}
+function setKey(k){try{localStorage.setItem("gwt-key",k);}catch(e){}}
+function when(iso){try{return new Date(iso).toLocaleString("en-GB",{day:"numeric",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});}catch(e){return iso;}}
+function describe(info){return info?`Tracker: ${info.source} · saved ${when(info.savedAt)}`:"";}
+function showSaveBar(){const b=$("savebar");$("saveMsg").textContent="";
+  if(!SERVER.api){b.hidden=false;$("saveText").replaceChildren(el("b",null,fmt(pending.rows.length)+" rows")," from "+pending.filename+" are shown in this browser only. This copy of the dashboard has no server to save to.");
+    for(const id of ["saveKey","saveBtn"])$(id).hidden=true;for(const l of b.querySelectorAll("label"))l.hidden=true;return;}
+  if(!SERVER.uploadsEnabled){b.hidden=false;$("saveText").replaceChildren(el("b",null,fmt(pending.rows.length)+" rows")," from "+pending.filename+" are shown in this browser only. Saving is switched off until UPLOAD_KEY is set in Railway.");
+    for(const id of ["saveKey","saveBtn"])$(id).hidden=true;for(const l of b.querySelectorAll("label"))l.hidden=true;return;}
+  for(const id of ["saveKey","saveBtn"])$(id).hidden=false;for(const l of b.querySelectorAll("label"))l.hidden=false;
+  $("saveKey").value=getKey();
+  $("saveText").replaceChildren("Previewing ",el("b",null,fmt(pending.rows.length)+" rows")," from "+pending.filename+". Save it to update the dashboard for everyone.");
+  b.hidden=false;}
+async function post(url,body){const r=await fetch(url,{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":$("saveKey").value||getKey()},body:JSON.stringify(body||{})});
+  let j={};try{j=await r.json();}catch(e){}if(!r.ok)throw new Error(j.error||("Error "+r.status));return j;}
+$("saveBtn").onclick=async()=>{if(!pending)return;const btn=$("saveBtn");btn.disabled=true;$("saveMsg").textContent="Saving…";
+  try{const j=await post("api/tracker",{rows:pending.rows,filename:pending.filename});setKey($("saveKey").value);
+    currentInfo=j.info;$("srcnote").textContent=describe(j.info);pending=null;$("savebar").hidden=true;toast("Saved. Everyone now sees this tracker.");loadHistory();}
+  catch(err){$("saveMsg").textContent="Not saved: "+err.message;}finally{btn.disabled=false;}};
+$("discardBtn").onclick=async()=>{pending=null;$("savebar").hidden=true;await reloadTracker();toast("Back to the saved tracker.");};
+async function fetchTracker(){
+  try{const r=await fetch("api/tracker",{cache:"no-store"});if(r.ok){const j=await r.json();if(j&&Array.isArray(j.rows)){SERVER.api=true;return {rows:j.rows,info:j.info};}}}catch(e){}
+  const r=await fetch("data/tracker.json");if(!r.ok)throw new Error("tracker data not found");return {rows:await r.json(),info:null};}
+async function reloadTracker(){const t=await fetchTracker();currentInfo=t.info;select(null);loadTracker(t.rows,t.info?describe(t.info):"Tracker: bundled data");}
+async function loadHistory(){const card=$("historyCard");if(!SERVER.api){card.hidden=true;return;}
+  try{const r=await fetch("api/history",{cache:"no-store"});const list=await r.json();$("histCount").textContent=fmt(list.length);
+    const tb=$("histBody");tb.replaceChildren();
+    for(const v of list){const cur=currentInfo&&currentInfo.id===v.id;
+      const how={upload:"Uploaded",bundled:"From code",restore:"Restored"}[v.method]||v.method||"";
+      const td=el("td");if(cur)td.append(el("span",{class:"srcnote"},"Current"));
+      else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
+        try{if(!$("saveKey").value)$("saveKey").value=getKey();const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore");await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}
+        catch(err){toast("Not restored: "+err.message+(getKey()?"":" Load a tracker once to enter the upload password."));b.disabled=false;}};td.append(b);}
+      tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.rows||0)),el("td",null,how),td));}
+    if(!SERVER.persistent)$("histNote").textContent="Warning: this server isn't using a volume, so these versions will be lost on the next redeploy.";
+  }catch(e){card.hidden=true;}}
 
 /* ---------- 3D viewer (WebGL2) ---------- */
 let view3d=null;
@@ -559,8 +620,10 @@ function createViewer(g){
 {const h=(location.hash||"").slice(1);if(["summary","checks"].includes(h))showView(h);}
 (async()=>{
   try{
-    const [cfg,meta,tracker]=await Promise.all(["data/config.json","data/meta.json","data/tracker.json"].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u+" not found");return r.json();})));
-    META=meta;$("stamp").textContent=cfg.stamp||"";loadTracker(tracker,cfg.source||"");
+    const [cfg,meta]=await Promise.all(["data/config.json","data/meta.json"].map(u=>fetch(u).then(r=>{if(!r.ok)throw new Error(u+" not found");return r.json();})));
+    const tr=await fetchTracker();
+    if(SERVER.api){try{const s=await (await fetch("api/status",{cache:"no-store"})).json();SERVER.uploadsEnabled=!!s.uploadsEnabled;SERVER.persistent=!!s.persistent;}catch(e){}}
+    META=meta;$("stamp").textContent=cfg.stamp||"";currentInfo=tr.info;loadTracker(tr.rows,tr.info?describe(tr.info):(cfg.source||""));loadHistory();
   }catch(err){$("loading").textContent="Couldn't load the tracker data ("+err.message+").";return;}
   try{
     const g=await decodeGeo();view3d=createViewer(g);
