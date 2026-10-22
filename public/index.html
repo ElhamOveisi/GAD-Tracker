@@ -145,6 +145,8 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   <div class="filters">
     <label for="fGroup">Group<select id="fGroup"></select></label>
     <label for="fSub">Sub group<select id="fSub"></select></label>
+    <label for="fCat">Element category<select id="fCat"></select></label>
+    <label for="fLevel">Level<select id="fLevel"></select></label>
     <label for="fStatus">Status<select id="fStatus"></select></label>
     <label for="fSearch">Activity ID<input id="fSearch" type="search" placeholder="e.g. IG5-AT-ST" autocomplete="off"></label>
     <button class="btn" id="reset" type="button">Reset</button>
@@ -273,22 +275,28 @@ function hexRGB(h){return [parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),p
 let META=[]; // [aid, liftNote, guid, modelArea, type]
 let TRACKER=[]; let SOURCE="";
 let panels=[]; // per model panel: {aid,note,guid,area,type,row}
-let rowsAll=[]; // tracker rows enriched: {group,sub,desc,type,id,sqm,status,model:[panelIdx]}
+let rowsAll=[]; // tracker rows enriched: {group,sub,desc,type,id,sqm,status,level,cat,model:[panelIdx]}
 function loadTracker(rows,source){
   TRACKER=rows; SOURCE=source;
   const idCount={}; for(const r of rows){idCount[r[4]]=(idCount[r[4]]||0)+1;}
   const byKey=new Map();
   rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:r[4],sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],model:[]};
     const key=(idCount[r[4]]>1?o.sub:"")+"|"+o.id; if(!byKey.has(key))byKey.set(key,o); return o;});
-  panels=META.map((m,i)=>{const p={aid:m[0],note:m[1],guid:m[2],area:m[3],type:m[4],row:null,idx:i};
+  // meta: [activity id, lift, GUID, model area, (unused), level, STJV_1D_Element_Category]
+  panels=META.map((m,i)=>{const p={aid:m[0],note:m[1],guid:m[2],area:m[3],level:m[5]||"",cat:(m[6]||"").toUpperCase(),row:null,idx:i};
     p.row=byKey.get(m[1]+"|"+m[0])||byKey.get("|"+m[0])||null; if(p.row)p.row.model.push(i); return p;});
+  // Category: STJV_1D_Element_Category from the model; where blank, the tracker's Description
+  const descCat=d=>(d||"").replace(/\s*\(B\)\s*$/i,"").trim().toUpperCase()||"(no category)";
+  for(const r of rowsAll){const p=r.model.length?panels[r.model[0]]:null;r.level=p?(p.level||"(no level)"):"Not in model";r.cat=p&&p.cat?p.cat:descCat(r.desc);r.catFromTracker=!(p&&p.cat);}
+  for(const p of panels)if(!p.row){if(!p.level)p.level="(no level)";if(!p.cat)p.cat="(no category)";}
   $("srcnote").textContent=source;
   buildFilters(); applyAll();
 }
 function panelStatus(p){return p.row?p.row.status:NOT_IN_TRACKER[0];}
 
 /* ---------- filters ---------- */
-const F={group:"",sub:"",status:"",q:""};
+const F={group:"",sub:"",cat:"",level:"",status:"",q:""};
+const natural=(a,b)=>a.localeCompare(b,undefined,{numeric:true});
 function opts(sel,values,cur,allLabel){sel.replaceChildren(el("option",{value:""},allLabel));for(const v of values){const o=el("option",{value:v},v);if(v===cur)o.selected=true;sel.append(o);}}
 function buildFilters(){
   const groups=[...new Set(rowsAll.map(r=>r.group))].sort();
@@ -296,17 +304,28 @@ function buildFilters(){
   const subs=[...new Set(rowsAll.filter(r=>!F.group||r.group===F.group).map(r=>r.sub))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
   if(F.sub&&!subs.includes(F.sub))F.sub="";
   opts($("fSub"),subs,F.sub,"All sub groups");
+  const scope=rowsAll.filter(r=>(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub));
+  const extra=(!F.group&&!F.sub)?panels.filter(p=>!p.row):[];
+  const cats=[...new Set([...scope.map(r=>r.cat),...extra.map(p=>p.cat)])].sort(natural);
+  if(F.cat&&!cats.includes(F.cat))F.cat="";
+  opts($("fCat"),cats,F.cat,"All categories");
+  const lvls=[...new Set([...scope.filter(r=>!F.cat||r.cat===F.cat).map(r=>r.level),...extra.filter(p=>!F.cat||p.cat===F.cat).map(p=>p.level)])].sort(natural);
+  if(F.level&&!lvls.includes(F.level))F.level="";
+  opts($("fLevel"),lvls,F.level,"All levels");
   const st=ORDER.filter(s=>s===NOT_IN_TRACKER[0]||rowsAll.some(r=>r.status===s));
   for(const r of rowsAll)if(!st.includes(r.status))st.push(r.status);
   opts($("fStatus"),st,F.status,"All statuses");
 }
-function rowPass(r){return(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub)&&(!F.status||r.status===F.status)&&(!F.q||r.id.toUpperCase().includes(F.q));}
-function panelPass(p){if(p.row)return rowPass(p.row);return !F.group&&!F.sub&&(!F.status||F.status===NOT_IN_TRACKER[0])&&(!F.q||p.aid.toUpperCase().includes(F.q));}
+function placePass(r){return(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub)&&(!F.cat||r.cat===F.cat)&&(!F.level||r.level===F.level)&&(!F.q||r.id.toUpperCase().includes(F.q));}
+function rowPass(r){return placePass(r)&&(!F.status||r.status===F.status);}
+function panelPass(p){if(p.row)return rowPass(p.row);return !F.group&&!F.sub&&(!F.cat||p.cat===F.cat)&&(!F.level||p.level===F.level)&&(!F.status||F.status===NOT_IN_TRACKER[0])&&(!F.q||p.aid.toUpperCase().includes(F.q));}
 $("fGroup").onchange=e=>{F.group=e.target.value;F.sub="";buildFilters();applyAll();};
-$("fSub").onchange=e=>{F.sub=e.target.value;applyAll();};
+$("fSub").onchange=e=>{F.sub=e.target.value;buildFilters();applyAll();};
+$("fCat").onchange=e=>{F.cat=e.target.value;buildFilters();applyAll();};
+$("fLevel").onchange=e=>{F.level=e.target.value;applyAll();};
 $("fStatus").onchange=e=>{F.status=e.target.value;applyAll();};
 let qT;$("fSearch").oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{F.q=e.target.value.trim().toUpperCase();applyAll();},180);};
-$("reset").onclick=()=>{F.group=F.sub=F.status=F.q="";$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
+$("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.status=F.q="";$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
 
 /* ---------- tabs ---------- */
 function showView(v){for(const b of document.querySelectorAll("nav.tabs button"))b.setAttribute("aria-selected",b.dataset.view===v);
@@ -380,8 +399,9 @@ function select(obj,zoom){
   const dl=el("dl");
   const add=(k,v)=>{if(v!=null&&v!=="")dl.append(el("dt",null,k),el("dd",null,v));};
   add("Status",el("span",{class:"pill"},el("i",{style:"background:"+COLOR[st]}),st));
-  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Type",row.type);add("Area (tracker)",row.sqm.toFixed(3)+" m²");}
-  if(p){add("Area (model)",p.area?p.area.toFixed(3)+" m²":"not in model");add("Revit type",p.type);add("IFC GUID",p.guid);}
+  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Category",row.cat+(row.catFromTracker?" (from tracker)":""));add("Level",row.level);add("Area (tracker)",row.sqm.toFixed(3)+" m²");}
+  else if(p){add("Category",p.cat);add("Level",p.level);}
+  if(p){add("Area (model)",p.area?p.area.toFixed(3)+" m²":"not in model");add("IFC GUID",p.guid);}
   else add("In model","No — not found in the IFC");
   if(pidx.length>1)add("Model elements",pidx.length+" (duplicate)");
   const close=el("button",{type:"button","aria-label":"Close"},"×");close.onclick=()=>select(null);
@@ -399,7 +419,7 @@ function agg(rows){const o={n:0,a:0,s:{}};for(const r of rows){const v=measure==
 function fmtV(v){return measure==="count"?fmt(Math.round(v)):fmt(Math.round(v));}
 function minibar(o){const d=el("div",{class:"minibar"});for(const s of ORDER){const v=o.s[s]||0;if(v)d.append(el("div",{style:`width:${pct(v,o.n)}%;background:${COLOR[s]}`,title:`${s}: ${p1(pct(v,o.n))}`}));}return d;}
 function drawSummary(){
-  const rows=rowsAll.filter(r=>(!F.q||r.id.toUpperCase().includes(F.q))&&(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub));
+  const rows=rowsAll.filter(placePass);
   const tot=agg(rows); const sts=ORDER.filter(s=>rowsAll.some(r=>r.status===s));
   for(const r of rowsAll)if(!sts.includes(r.status))sts.push(r.status);
   const bb=$("bigbar");bb.replaceChildren();const bl=$("biglegend");bl.replaceChildren();
@@ -433,7 +453,7 @@ function drawChecks(){
       for(const r of rows){const tr=el("tr");r.forEach((v,i)=>tr.append(el("td",{class:i===0?"id":""},v)));tb.append(tr);}t.append(tb);c.append(el("div",{class:"tablebox",style:"max-height:300px"},t));}
     else c.append(el("p",null,"None."));box.append(c);};
   const mOnly=panels.filter(p=>!p.row);
-  card("In the model, missing from the tracker","Model panels whose Activity ID has no row in the tracker. They show pink in the 3D view.",["Activity ID","Revit type","Model m²"],mOnly.map(p=>[p.aid,p.type,p.area?p.area.toFixed(2):"—"]));
+  card("In the model, missing from the tracker","Model panels whose Activity ID has no row in the tracker. They show pink in the 3D view.",["Activity ID","Level","Category","Model m²"],mOnly.map(p=>[p.aid,p.level,p.cat,p.area?p.area.toFixed(2):"—"]));
   const tOnly=rowsAll.filter(r=>!r.model.length);
   card("In the tracker, missing from the model","Tracker rows with no matching panel in the IFC.",["Activity ID","Group","Sub group","Status"],tOnly.map(r=>[r.id,r.group,r.sub,r.status]));
   const dup=rowsAll.filter(r=>r.model.length>1);

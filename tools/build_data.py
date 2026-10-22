@@ -28,8 +28,11 @@ def pack(work, out=OUT):
         vc.append(len(uq)); tc.append(len(tri))
         P.append((uq - 32500).astype(np.int16)); I.append(tri.astype(np.uint16))
         e = E[k]; p = e['props']; n = p.get('STJV_1D_Element_Notes')
+        level = e.get('level') or re.sub(r'^Level:\s*', '', str(p.get('Level') or '')).strip()
+        cat = str(p.get('STJV_1D_Element_Category') or '').strip()
+        # [activity id, lift (P1-P4), IFC GUID, Revit area, (unused), level, STJV_1D_Element_Category]
         meta.append([p['STJV_4D_Activity ID'].strip(), n if n in ('P1', 'P2', 'P3', 'P4') else '',
-                     e['guid'], round(p.get('Area') or 0, 3), e.get('objtype') or ''])
+                     e['guid'], round(p.get('Area') or 0, 3), '', level, cat])
     hdr = struct.pack('<I', len(ids)) + np.array(vc, np.uint32).tobytes() + np.array(tc, np.uint32).tobytes()
     hdr += struct.pack('<4f', *lo[:3], scale)
     body = np.concatenate(P).tobytes()
