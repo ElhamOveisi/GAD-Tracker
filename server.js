@@ -298,6 +298,23 @@ async function api(req, res, p) {
     }).filter(Boolean);
     return send(res, 200, list);
   }
+  const dl = p.match(/^\/api\/history\/([\w-]+)\/download$/);
+  if (dl && req.method === "GET") {
+    const file = path.join(HISTORY, dl[1] + ".json");
+    if (!fs.existsSync(file)) return send(res, 404, { error: "That version doesn't exist." });
+    const doc = readJSON(file);
+    const cell = (v) => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [["Full name", "Sub group", "Description", "TYPE", "STJV_4D_Activity ID", "Sqm", "STJV_4D_Status"].join(",")];
+    for (const r of doc.rows) lines.push(r.map(cell).join(","));
+    const base = String((doc.info && doc.info.source) || "tracker").replace(/\.(xlsx|csv)$/i, "").replace(/[^\w.\- ()]/g, "_");
+    const stamp = String((doc.info && doc.info.savedAt) || "").slice(0, 16).replace(/[:T]/g, "-");
+    res.writeHead(200, {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${base}_${stamp}.csv"`,
+      "Cache-Control": "no-store",
+    });
+    return res.end("\uFEFF" + lines.join("\r\n") + "\r\n"); // BOM so Excel reads UTF-8
+  }
   const m = p.match(/^\/api\/history\/([\w-]+)\/restore$/);
   if (m && req.method === "POST") {
     if (!UPLOAD_KEY) return send(res, 403, { error: "Saving is switched off. Set the UPLOAD_KEY variable in Railway to turn it on." });

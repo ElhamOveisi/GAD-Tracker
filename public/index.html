@@ -250,7 +250,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     </div>
     <div class="card hist" id="historyCard">
       <h2>Tracker versions <span class="count" id="histCount">0</span></h2>
-      <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Restoring a version saves it as the current tracker; nothing is deleted.</p>
+      <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Download gives a CSV that opens in Excel and can be loaded back in. Restoring a version saves it as the current tracker; nothing is deleted.</p>
       <div class="tablebox" style="max-height:320px"><table><thead><tr><th>Saved</th><th>File</th><th>Rows</th><th>How</th><th></th></tr></thead><tbody id="histBody"></tbody></table></div>
     </div>
   </section>
@@ -538,7 +538,9 @@ async function loadHistory(){const card=$("historyCard");$("restoreBox").hidden=
     const tb=$("histBody");tb.replaceChildren();
     for(const v of list){const cur=currentInfo&&currentInfo.id===v.id;
       const how={upload:"Uploaded",bundled:"From code",restore:"Restored"}[v.method]||v.method||"";
-      const td=el("td");if(cur)td.append(el("span",{class:"srcnote"},"Current"));
+      const td=el("td",{style:"display:flex;gap:6px;align-items:center"});
+      td.append(el("a",{class:"btn",href:"api/history/"+encodeURIComponent(v.id)+"/download",download:"",style:"text-decoration:none;font-size:12px"},"Download"));
+      if(cur)td.append(el("span",{class:"srcnote"},"Current"));
       else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
         try{const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore",{},$("restoreKey").value);$("restoreKey").value="";await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}
         catch(err){toast("Not restored: "+err.message+"");b.disabled=false;}};td.append(b);}
