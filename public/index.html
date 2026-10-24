@@ -157,6 +157,10 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     </div>
   </div>
 
+  <div class="savebar" id="oldModelNote" hidden>
+    <span>This model version was converted before levels and element categories were added, so <b>Level</b> is empty and categories come from the tracker only. Upload the IFC again with <b>Upload new IFC</b>, or restore a newer model under <b>Data Checks → Model versions</b>.</span>
+  </div>
+
   <div class="savebar" id="modelbar" hidden>
     <span id="modelText"></span>
     <label for="modelKey" class="srcnote" id="modelKeyLabel">Upload password</label>
@@ -716,7 +720,7 @@ function createViewer(g){
       try{const r=await fetch("api/model",{cache:"no-store"});if(r.ok)MODEL=await r.json();}catch(e){}}
     const base=MODEL?`api/model/files/${encodeURIComponent(MODEL.id)}/`:"data/";
     const meta=await fetch(base+"meta.json").then(r=>{if(!r.ok)throw new Error("model data not found");return r.json();});
-    META=meta;$("stamp").textContent=MODEL?`Model: ${MODEL.source} · ${fmt(MODEL.panels||META.length)} panels · loaded ${when(MODEL.savedAt)}`:(cfg.stamp||"");
+    META=meta;$("oldModelNote").hidden=!(META.length&&META[0].length<7);$("stamp").textContent=MODEL?`Model: ${MODEL.source} · ${fmt(MODEL.panels||META.length)} panels · loaded ${when(MODEL.savedAt)}`:(cfg.stamp||"");
     $("uplIfcLabel").hidden=!(SERVER.api&&SERVER.uploadsEnabled);loadModelHistory();pollJob(true);currentInfo=tr.info;loadTracker(tr.rows,tr.info?describe(tr.info):(cfg.source||""));loadHistory();
   }catch(err){$("loading").textContent="Couldn't load the tracker data ("+err.message+").";return;}
   try{
