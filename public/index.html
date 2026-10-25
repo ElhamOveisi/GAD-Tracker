@@ -23,14 +23,24 @@
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--font-ui);font-size:14px}
 .wrap{padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:14px 24px;display:flex;flex-direction:column;gap:12px;max-width:1700px;margin:0 auto}
-header.top{display:flex;flex-wrap:wrap;align-items:center;gap:10px 20px;justify-content:space-between;background:var(--navy);color:var(--on-navy);border-radius:8px;padding:14px 18px}
-header.top h1{font-family:var(--font-head);font-weight:600;font-size:22px;margin:0;letter-spacing:.01em;text-wrap:balance}
-header.top .stamp{color:var(--on-navy-muted);font-size:12px}
-nav.tabs{display:flex;gap:4px;background:var(--navy-2);border-radius:8px;padding:4px}
-nav.tabs button{font:500 13px var(--font-ui);border:0;background:transparent;color:var(--on-navy);padding:7px 14px;border-radius:5px;cursor:pointer}
-nav.tabs button:hover{background:rgba(255,255,255,.08)}
-nav.tabs button[aria-selected="true"]{background:var(--on-navy);color:var(--navy)}
-header.top button:focus-visible{outline-color:var(--on-navy)}
+header.top{display:grid;grid-template-columns:auto minmax(0,1fr) auto;align-items:center;gap:12px 20px;background:var(--navy);color:var(--on-navy);border-radius:8px;padding:12px 14px}
+header.top .ttl{text-align:center;min-width:0}
+header.top h1{font-family:var(--font-head);font-weight:600;font-size:24px;margin:0;letter-spacing:.01em;text-wrap:balance}
+header.top .stamp{color:var(--on-navy-muted);font-size:12px;margin-top:2px}
+.logos{display:flex;gap:8px;align-items:stretch}
+.logos .tile{background:#fff;border-radius:6px;padding:6px 10px;height:60px;display:flex;align-items:center;gap:14px}
+.logos .tile img{height:100%;width:auto;display:block}
+@media (max-width:1100px){.logos .tile{height:48px;padding:5px 8px}}
+@media (max-width:820px){
+  header.top{grid-template-columns:1fr;justify-items:center}
+  header.top .ttl{order:-1}
+  .logos{flex-wrap:wrap;justify-content:center}
+  .logos .tile{height:40px}
+}
+nav.tabs{display:flex;gap:4px;background:var(--soft);border:1px solid var(--line);border-radius:8px;padding:4px;align-self:flex-end}
+nav.tabs button{font:500 13px var(--font-ui);border:0;background:transparent;color:var(--ink);padding:7px 14px;border-radius:5px;cursor:pointer}
+nav.tabs button:hover{background:var(--line)}
+nav.tabs button[aria-selected="true"]{background:var(--navy);color:var(--on-navy)}
 button:focus-visible,select:focus-visible,input:focus-visible,label.upload:focus-within{outline:2px solid var(--focus);outline-offset:2px}
 .filters{display:flex;flex-wrap:wrap;gap:10px 14px;align-items:flex-end;background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:10px 14px}
 .filters label{display:flex;flex-direction:column;gap:3px;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em}
@@ -131,18 +141,26 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 
 <div class="wrap">
   <header class="top">
-    <div>
+    <div class="logos">
+      <span class="tile"><img src="img/logo-dct.png" alt="Department of Culture and Tourism Abu Dhabi"></span>
+      <span class="tile"><img src="img/logo-time.png" alt="TiME Turner International Middle East"></span>
+    </div>
+    <div class="ttl">
       <h1>GAD Glass Works Tracker</h1>
       <div class="stamp" id="stamp"></div>
     </div>
+    <div class="logos">
+      <span class="tile"><img src="img/logo-wsp.png" alt="WSP"></span>
+      <span class="tile"><img src="img/logo-sixconstruct.png" alt="Six Construct"><img src="img/logo-trojan.png" alt="Trojan General Contracting"></span>
+    </div>
+  </header>
+
+  <div class="filters">
     <nav class="tabs" role="tablist">
       <button role="tab" id="tab-model" aria-selected="true" data-view="model">3D Model</button>
       <button role="tab" id="tab-summary" aria-selected="false" data-view="summary">Summary</button>
       <button role="tab" id="tab-checks" aria-selected="false" data-view="checks">Data Checks</button>
     </nav>
-  </header>
-
-  <div class="filters">
     <label for="fGroup">Group<select id="fGroup"></select></label>
     <label for="fSub">Sub group<select id="fSub"></select></label>
     <label for="fCat">Element category<select id="fCat"></select></label>
