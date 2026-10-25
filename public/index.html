@@ -262,7 +262,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   <section id="view-checks" hidden>
     <div class="checks" id="checks"></div>
     <div class="card hist" id="restoreBox" hidden>
-      <label for="restoreKey" class="srcnote">Upload password, needed to restore a version below</label>
+      <label for="restoreKey" class="srcnote">Upload password, needed to download or restore a version below</label>
       <input id="restoreKey" type="password" autocomplete="off" style="font:14px var(--font-ui);color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:6px 8px;margin-left:8px;width:200px;max-width:100%">
     </div>
     <div class="card hist" id="modelHistCard" hidden>
@@ -272,7 +272,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     </div>
     <div class="card hist" id="historyCard">
       <h2>Tracker versions <span class="count" id="histCount">0</span></h2>
-      <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Download gives a CSV that opens in Excel and can be loaded back in. Restoring a version saves it as the current tracker; nothing is deleted.</p>
+      <p class="srcnote" id="histNote">Every saved tracker is kept, newest first. Download (password needed) gives a CSV that opens in Excel and can be loaded back in. Restoring a version saves it as the current tracker; nothing is deleted.</p>
       <div class="tablebox" style="max-height:320px"><table><thead><tr><th>Saved</th><th>File</th><th>Rows</th><th>How</th><th></th></tr></thead><tbody id="histBody"></tbody></table></div>
     </div>
   </section>
@@ -555,13 +555,22 @@ async function fetchTracker(){
   try{const r=await fetch("api/tracker",{cache:"no-store"});if(r.ok){const j=await r.json();if(j&&Array.isArray(j.rows)){SERVER.api=true;return {rows:j.rows,info:j.info};}}}catch(e){}
   const r=await fetch("data/tracker.json");if(!r.ok)throw new Error("tracker data not found");return {rows:await r.json(),info:null};}
 async function reloadTracker(){const t=await fetchTracker();currentInfo=t.info;select(null);loadTracker(t.rows,t.info?describe(t.info):"Tracker: bundled data");}
+async function downloadVersion(v,btn){btn.disabled=true;
+  try{const key=needKey($("restoreKey").value);
+    const r=await fetch("api/history/"+encodeURIComponent(v.id)+"/download",{method:"POST",headers:{"x-upload-key":key}});
+    if(!r.ok){let j={};try{j=await r.json();}catch(e){}throw new Error(j.error||("Error "+r.status));}
+    $("restoreKey").value="";
+    const name=((r.headers.get("Content-Disposition")||"").match(/filename="([^"]+)"/)||[,"tracker.csv"])[1];
+    const url=URL.createObjectURL(await r.blob());const a=el("a",{href:url,download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
+    toast("Downloaded "+name);}
+  catch(err){toast("Not downloaded: "+err.message);}finally{btn.disabled=false;}}
 async function loadHistory(){const card=$("historyCard");$("restoreBox").hidden=!(SERVER.api&&SERVER.uploadsEnabled);if(!SERVER.api){card.hidden=true;return;}
   try{const r=await fetch("api/history",{cache:"no-store"});const list=await r.json();$("histCount").textContent=fmt(list.length);
     const tb=$("histBody");tb.replaceChildren();
     for(const v of list){const cur=currentInfo&&currentInfo.id===v.id;
       const how={upload:"Uploaded",bundled:"From code",restore:"Restored"}[v.method]||v.method||"";
       const td=el("td",{style:"display:flex;gap:6px;align-items:center"});
-      td.append(el("a",{class:"btn",href:"api/history/"+encodeURIComponent(v.id)+"/download",download:"",style:"text-decoration:none;font-size:12px"},"Download"));
+      if(SERVER.uploadsEnabled){const d=el("button",{class:"btn",type:"button",style:"font-size:12px"},"Download");d.onclick=()=>downloadVersion(v,d);td.append(d);}
       if(cur)td.append(el("span",{class:"srcnote"},"Current"));
       else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
         try{const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore",{},$("restoreKey").value);$("restoreKey").value="";await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}

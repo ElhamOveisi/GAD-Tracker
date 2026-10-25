@@ -299,7 +299,9 @@ async function api(req, res, p) {
     return send(res, 200, list);
   }
   const dl = p.match(/^\/api\/history\/([\w-]+)\/download$/);
-  if (dl && req.method === "GET") {
+  if (dl && req.method === "POST") {
+    if (!UPLOAD_KEY) return send(res, 403, { error: "Downloads are switched off. Set the UPLOAD_KEY variable in Railway to turn them on." });
+    if (!keyOK(req)) return send(res, 401, { error: "Wrong upload password." });
     const file = path.join(HISTORY, dl[1] + ".json");
     if (!fs.existsSync(file)) return send(res, 404, { error: "That version doesn't exist." });
     const doc = readJSON(file);
