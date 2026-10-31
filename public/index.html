@@ -298,15 +298,21 @@ let META=[]; // [aid, liftNote, guid, modelArea, type]
 let TRACKER=[]; let SOURCE="";
 let panels=[]; // per model panel: {aid,note,guid,area,type,row}
 let rowsAll=[]; // tracker rows enriched: {group,sub,desc,type,id,sqm,status,level,cat,model:[panelIdx]}
+// a repeated tracker row whose twin is already matched to the panel: a tracker duplicate, not a missing panel
+function isExtraDup(r){return !LIFT_SUBS.has(r.sub)&&rowsAll.some(o=>o!==r&&o.key===r.key&&o.model.length);}
+function normId(s){return String(s||"").normalize("NFKC").toUpperCase().replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g,"-").replace(/\s+/g,"");}
 function loadTracker(rows,source){
   TRACKER=rows; SOURCE=source;
-  const idCount={}; for(const r of rows){idCount[r[4]]=(idCount[r[4]]||0)+1;}
-  const byKey=new Map();
-  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:r[4],sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],model:[]};
-    const key=(idCount[r[4]]>1?o.sub:"")+"|"+o.id; if(!byKey.has(key))byKey.set(key,o); return o;});
+  // Rows are matched on a normalised Activity ID: case, dash variants and spaces don't matter.
+  const byId=new Map();
+  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:String(r[4]).trim(),sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],model:[]};
+    o.key=normId(o.id);if(!byId.has(o.key))byId.set(o.key,[]);byId.get(o.key).push(o);return o;});
   // meta: [activity id, lift, GUID, model area, (unused), level, STJV_1D_Element_Category]
   panels=META.map((m,i)=>{const p={aid:m[0],note:m[1],guid:m[2],area:m[3],level:m[5]||"",cat:(m[6]||"").toUpperCase(),row:null,idx:i};
-    p.row=byKey.get(m[1]+"|"+m[0])||byKey.get("|"+m[0])||null; if(p.row)p.row.model.push(i); return p;});
+    const cands=byId.get(normId(m[0]))||[];
+    // lifts share IDs across P1-P4: prefer the row in the panel's own lift, then any row not yet matched
+    p.row=cands.find(r=>m[1]&&r.sub===m[1]&&!r.model.length)||cands.find(r=>!r.model.length&&(!m[1]||!LIFT_SUBS.has(r.sub)))||cands.find(r=>m[1]&&r.sub===m[1])||cands[0]||null;
+    if(p.row)p.row.model.push(i); return p;});
   // Category: STJV_1D_Element_Category from the model; where blank, the tracker's Description
   const descCat=d=>(d||"").replace(/\s*\(B\)\s*$/i,"").trim().toUpperCase()||"(no category)";
   for(const r of rowsAll){const p=r.model.length?panels[r.model[0]]:null;r.level=p?(p.level||"(no level)"):"Not in model";r.cat=p&&p.cat?p.cat:descCat(r.desc);r.catFromTracker=!(p&&p.cat);}
@@ -368,7 +374,7 @@ function applyAll(){
   $("kTracker").textContent=fmt(rows.length);
   $("kInst").textContent=rows.length?p1(pct(inst,rows.length)):"—";
   $("kModel").textContent=fmt(matched);
-  $("kUnm").textContent=fmt(rows.length-matched+extra.length);
+  $("kUnm").textContent=fmt(rows.filter(r=>!r.model.length&&!isExtraDup(r)).length+extra.length);
   $("shownTitle").textContent=fmt(rows.length+extra.length)+" panels shown";
   drawDonut(counts,rows.length+extra.length);
   drawTable(rows,extra);
@@ -476,12 +482,14 @@ function drawChecks(){
     else c.append(el("p",null,"None."));box.append(c);};
   const mOnly=panels.filter(p=>!p.row);
   card("In the model, missing from the tracker","Model panels whose Activity ID has no row in the tracker. They show pink in the 3D view.",["Activity ID","Level","Category","Model m²"],mOnly.map(p=>[p.aid,p.level,p.cat,p.area?p.area.toFixed(2):"—"]));
-  const tOnly=rowsAll.filter(r=>!r.model.length);
+  const tOnly=rowsAll.filter(r=>!r.model.length&&!isExtraDup(r));
   card("In the tracker, missing from the model","Tracker rows with no matching panel in the IFC.",["Activity ID","Group","Sub group","Status"],tOnly.map(r=>[r.id,r.group,r.sub,r.status]));
   const dup=rowsAll.filter(r=>r.model.length>1);
   card("Duplicate panels in the model","One tracker row matched by more than one model element.",["Activity ID","Group","Model elements"],dup.map(r=>[r.id,r.group,String(r.model.length)]));
-  const seen={};const tdup=[];for(const r of rowsAll){const k=r.sub+"|"+r.id;if(seen[k])tdup.push([r.id,r.group,r.sub]);seen[k]=1;}
-  card("Duplicate Activity IDs in the tracker","The same Activity ID listed twice in the same sub group.",["Activity ID","Group","Sub group"],tdup);
+  const seen={};const tdup=[];for(const r of rowsAll){const k=(LIFT_SUBS.has(r.sub)?r.sub:"")+"|"+r.key;if(seen[k])tdup.push([r.id,r.group,r.sub]);seen[k]=1;}
+  card("Duplicate Activity IDs in the tracker","The same Activity ID on more than one row (lifts P1–P4 may share IDs, so those are only counted within one lift).",["Activity ID","Group","Sub group"],tdup);
+  const spell=[];for(const r of rowsAll)for(const i of r.model)if(panels[i].aid!==r.id)spell.push([r.id,panels[i].aid,r.group]);
+  card("Matched despite a spelling difference","Tracker and model IDs that differ only in capitals, dash type or spaces. They are matched, but worth making identical.",["Tracker ID","Model ID","Group"],spell);
   const odd=rowsAll.filter(r=>!COLOR[r.status]||(r.raw&&r.raw.trim()!==r.status));
   card("Status spelling","Statuses that don't match the standard list exactly. They are counted under the closest standard status where one exists.",["Activity ID","As written","Counted as"],odd.map(r=>[r.id,r.raw||"(blank)",r.status]));
   const area=rowsAll.filter(r=>r.model.length===1&&panels[r.model[0]].area>0&&r.group!=="Panoramic lift"&&Math.abs(panels[r.model[0]].area-r.sqm)>0.05*r.sqm);
