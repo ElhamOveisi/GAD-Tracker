@@ -581,19 +581,27 @@ async function downloadVersion(v,btn){btn.disabled=true;
     const url=URL.createObjectURL(await r.blob());const a=el("a",{href:url,download:name});document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),5000);
     toast("Downloaded "+name);}
   catch(err){toast("Not downloaded: "+err.message);}finally{btn.disabled=false;}}
-async function loadHistory(){const card=$("historyCard");$("restoreBox").hidden=!(SERVER.api&&SERVER.uploadsEnabled);if(!SERVER.api){card.hidden=true;return;}
-  try{const r=await fetch("api/history",{cache:"no-store"});const list=await r.json();$("histCount").textContent=fmt(list.length);
+async function loadHistory(){const card=$("historyCard");$("restoreBox").hidden=true;
+  try{const r=await fetch("api/history",{cache:"no-store"});const list=await r.json();
+    const cur=list.find(v=>currentInfo&&currentInfo.id===v.id)||list[0];
     const tb=$("histBody");tb.replaceChildren();
-    for(const v of list){const cur=currentInfo&&currentInfo.id===v.id;
-      const how={upload:"Uploaded",bundled:"From code",restore:"Restored"}[v.method]||v.method||"";
-      const td=el("td",{style:"display:flex;gap:6px;align-items:center"});
-      if(SERVER.uploadsEnabled){const d=el("button",{class:"btn",type:"button",style:"font-size:12px"},"Download");d.onclick=()=>downloadVersion(v,d);td.append(d);}
-      if(cur)td.append(el("span",{class:"srcnote"},"Current"));
-      else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
-        try{const j=await post("api/history/"+encodeURIComponent(v.id)+"/restore",{},$("restoreKey").value);$("restoreKey").value="";await reloadTracker();loadHistory();toast("Restored the version from "+when(v.savedAt)+".");}
-        catch(err){toast("Not restored: "+err.message+"");b.disabled=false;}};td.append(b);}
-      tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.rows||0)),el("td",null,how),td));}
-    if(!SERVER.persistent)$("histNote").textContent="Warning: this server isn't using a volume, so these versions will be lost on the next redeploy.";
+    if(SERVER.uploadsEnabled){
+      for(const v of list){const td=el("td");if(v.id===(currentInfo&&currentInfo.id)){td.append(el("span",{class:"srcnote"},"Current"));}
+        else{const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
+          const key=prompt("Upload password:");if(!key){b.disabled=false;return;}
+          try{const res=await fetch("api/history/"+encodeURIComponent(v.id)+"/restore",{method:"POST",headers:{"x-upload-key":key}});const j=await res.json().catch(()=>({}));
+            if(!res.ok)throw new Error(j.error||("error "+res.status));toast("Restored tracker from "+when(v.savedAt)+". Reloading…");setTimeout(()=>location.reload(),900);}
+          catch(err){toast("Not restored: "+err.message);b.disabled=false;}};td.append(b);}
+        const dlb=el("button",{class:"btn",type:"button"},"Download");dlb.onclick=async()=>{dlb.disabled=true;
+          const key=prompt("Upload password:");if(!key){dlb.disabled=false;return;}
+          try{const res=await fetch("api/history/"+encodeURIComponent(v.id)+"/download",{headers:{"x-upload-key":key}});
+            if(!res.ok)throw new Error("error "+res.status);const blob=await res.blob();const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download=v.source||"tracker.xlsx";a.click();}
+          catch(err){toast("Not downloaded: "+err.message);}dlb.disabled=false;};
+        tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.rows||0)),td,el("td",null,dlb)));
+      }
+    } else {
+      if(cur)tb.append(el("tr",null,el("td",null,when(cur.savedAt)),el("td",null,cur.source||""),el("td",null,fmt(cur.rows||0)),el("td",null,"Current"),el("td")));
+    }
   }catch(e){card.hidden=true;}}
 
 /* ---------- model upload ---------- */
@@ -625,15 +633,21 @@ async function pollJob(first){clearTimeout(pollT);let j;try{j=await (await fetch
   if(first)return; // nothing in progress on page load
   if(j.state==="done"){modelBar(["New model ready: ",el("b",null,j.file)," with "+fmt(j.panels||0)+" panels."],{reload:true});loadModelHistory();return;}
   if(j.state==="failed"){modelBar(["Conversion failed for ",el("b",null,j.file||"the IFC"),". ",j.error||""],{cancel:true});return;}}
-async function loadModelHistory(){const card=$("modelHistCard");if(!SERVER.api||!MODEL){card.hidden=true;return;}card.hidden=false;
-  try{const list=await (await fetch("api/model/history",{cache:"no-store"})).json();$("mhCount").textContent=fmt(list.length);const tb=$("mhBody");tb.replaceChildren();
-    for(const v of list){const td=el("td");if(v.id===MODEL.id)td.append(el("span",{class:"srcnote"},"Current"));
-      else if(SERVER.uploadsEnabled){const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
-        try{const r=await fetch("api/model/"+encodeURIComponent(v.id)+"/restore",{method:"POST",headers:{"x-upload-key":needKey($("restoreKey").value)}});$("restoreKey").value="";const j=await r.json().catch(()=>({}));
-          if(!r.ok)throw new Error(j.error||("error "+r.status));toast("Switched to the model from "+when(v.savedAt)+". Reloading…");setTimeout(()=>location.reload(),900);}
-        catch(err){toast("Not restored: "+err.message+"");b.disabled=false;}};td.append(b);}
-      tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.panels||0)),el("td",null,{upload:"Uploaded",bundled:"From code"}[v.method]||v.method||""),td));}}
-  catch(e){card.hidden=true;}}
+async function loadModelHistory(){const card=$("modelHistCard");if(!MODEL){card.hidden=true;return;}card.hidden=false;
+  try{const tb=$("mhBody");tb.replaceChildren();
+    if(SERVER.uploadsEnabled){
+      const list=await (await fetch("api/model/history",{cache:"no-store"})).json();
+      for(const v of list){const td=el("td");if(v.id===MODEL.id)td.append(el("span",{class:"srcnote"},"Current"));
+        else{const b=el("button",{class:"btn",type:"button"},"Restore");b.onclick=async()=>{b.disabled=true;
+          const key=prompt("Upload password:");if(!key){b.disabled=false;return;}
+          try{const res=await fetch("api/model/"+encodeURIComponent(v.id)+"/restore",{method:"POST",headers:{"x-upload-key":key}});const j=await res.json().catch(()=>({}));
+            if(!res.ok)throw new Error(j.error||("error "+res.status));toast("Switched to the model from "+when(v.savedAt)+". Reloading…");setTimeout(()=>location.reload(),900);}
+          catch(err){toast("Not restored: "+err.message);b.disabled=false;}};td.append(b);}
+        tb.append(el("tr",null,el("td",null,when(v.savedAt)),el("td",null,v.source||""),el("td",null,fmt(v.panels||0)),el("td",null,{upload:"Uploaded",bundled:"From code"}[v.method]||v.method||""),td));}
+    } else {
+      tb.append(el("tr",null,el("td",null,when(MODEL.savedAt)),el("td",null,MODEL.source||""),el("td",null,fmt(MODEL.panels||0)),el("td",null,"Current"),el("td")));
+    }
+  }catch(e){card.hidden=true;}}
 
 /* ---------- 3D viewer (WebGL2) ---------- */
 let view3d=null;
