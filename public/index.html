@@ -431,9 +431,9 @@ function select(obj,zoom){
   const dl=el("dl");
   const add=(k,v)=>{if(v!=null&&v!=="")dl.append(el("dt",null,k),el("dd",null,v));};
   add("Status",el("span",{class:"pill"},el("i",{style:"background:"+COLOR[st]}),st));
-  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Category",row.cat+(row.catFromTracker?" (from tracker)":""));add("Level",row.level);add("Area (tracker)",row.sqm.toFixed(3)+" m²");}
-  else if(p){add("Category",p.cat);add("Level",p.level);}
-  if(p){add("Area (model)",p.area?p.area.toFixed(3)+" m²":"not in model");add("IFC GUID",p.guid);}
+  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Category",row.cat+(row.catFromTracker?" (from tracker)":""));add("Level",row.level);add("Area",row.sqm.toFixed(3)+" m²");}
+  else if(p){add("Category",p.cat);add("Level",p.level);if(p.area)add("Area",p.area.toFixed(3)+" m²");}
+  if(p){add("IFC GUID",p.guid);}
   else add("In model","No — not found in the IFC");
   if(pidx.length>1)add("Model elements",pidx.length+" (duplicate)");
   const close=el("button",{type:"button","aria-label":"Close"},"×");close.onclick=()=>select(null);
