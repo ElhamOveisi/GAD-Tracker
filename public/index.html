@@ -477,8 +477,58 @@ function drawSummary(){
 }
 
 /* ---------- checks ---------- */
+function buildXlsx(sheets){
+  // Build a minimal .xlsx (OOXML) with multiple sheets, no external lib needed
+  const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const col=n=>{let s='';while(n>=0){s=String.fromCharCode(65+n%26)+s;n=Math.floor(n/26)-1;}return s;}
+  const cell=(v,r,c)=>{const ref=col(c)+r;if(typeof v==='number'&&!isNaN(v))return`<c r="${ref}" t="n"><v>${v}</v></c>`;return`<c r="${ref}" t="inlineStr"><is><t>${esc(v)}</t></is></c>`;}
+  const sheetXml=(rows)=>{let xml='<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+    rows.forEach((row,ri)=>{xml+=`<row r="${ri+1}">`+row.map((v,ci)=>cell(v,ri+1,ci)).join('')+'</row>';});
+    return xml+'</sheetData></worksheet>';}
+  // zip writer
+  const enc=new TextEncoder();
+  const parts=[];const cdir=[];let offset=0;
+  const addFile=(name,data)=>{const nb=enc.encode(name);const db=typeof data==='string'?enc.encode(data):data;
+    const lhLen=30+nb.length;const lh=new Uint8Array(lhLen);const lv=new DataView(lh.buffer);
+    lv.setUint32(0,0x04034b50,true);lv.setUint16(6,0,true);lv.setUint16(8,0,true);lv.setUint32(14,0,true);lv.setUint32(18,db.length,true);lv.setUint32(22,db.length,true);lv.setUint16(26,nb.length,true);lv.setUint16(28,0,true);lh.set(nb,30);
+    const cde=new Uint8Array(46+nb.length);const cdv=new DataView(cde.buffer);
+    cdv.setUint32(0,0x02014b50,true);cdv.setUint16(6,0,true);cdv.setUint16(8,0,true);cdv.setUint16(10,0,true);cdv.setUint32(16,0,true);cdv.setUint32(20,db.length,true);cdv.setUint32(24,db.length,true);cdv.setUint16(28,nb.length,true);cdv.setUint16(42,offset,true);cde.set(nb,46);
+    parts.push(lh,db);cdir.push(cde);offset+=lhLen+db.length;}
+  const sheetsXml=sheets.map((s,i)=>`<sheet name="${esc(s.name)}" sheetId="${i+1}" r:id="rId${i+2}"/>`).join('');
+  addFile('[Content_Types].xml',`<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>${sheets.map((_,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join('')}</Types>`);
+  addFile('_rels/.rels',`<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>`);
+  addFile('xl/workbook.xml',`<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets>${sheetsXml}</sheets></workbook>`);
+  const wbRels=sheets.map((s,i)=>`<Relationship Id="rId${i+2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join('');
+  addFile('xl/_rels/workbook.xml.rels',`<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/>${wbRels}</Relationships>`);
+  addFile('xl/sharedStrings.xml',`<?xml version="1.0"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="0" uniqueCount="0"/>`);
+  sheets.forEach((s,i)=>addFile(`xl/worksheets/sheet${i+1}.xml`,sheetXml(s.rows)));
+  const cdirBuf=new Uint8Array(cdir.reduce((a,b)=>a+b.length,0));let cdOff=0;for(const c of cdir){cdirBuf.set(c,cdOff);cdOff+=c.length;}
+  const eocd=new Uint8Array(22);const ev=new DataView(eocd.buffer);ev.setUint32(0,0x06054b50,true);ev.setUint16(8,sheets.length+4,true);ev.setUint16(10,sheets.length+4,true);ev.setUint32(12,cdirBuf.length,true);ev.setUint32(16,offset,true);
+  const all=new Uint8Array([...parts.flatMap(p=>[...p]),...cdirBuf,...eocd]);
+  return new Blob([all],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});}
+function downloadChecksXlsx(){
+  const mOnly=panels.filter(p=>!p.row);
+  const tOnly=rowsAll.filter(r=>!r.model.length&&!isExtraDup(r));
+  const dup=rowsAll.filter(r=>r.model.length>1);
+  const byKey={};for(const r of rowsAll){if(!byKey[r.key])byKey[r.key]=[];byKey[r.key].push(r);}
+  const tdup=[];for(const key in byKey){const grp=byKey[key];if(grp.length<2)continue;
+    const subs=grp.map(r=>r.sub);const allDiffLifts=subs.every(s=>LIFT_SUBS.has(s)||/^P\d+$/i.test(s))&&new Set(subs).size===subs.length;if(allDiffLifts)continue;
+    const seen2={};for(const r of grp){const k=(LIFT_SUBS.has(r.sub)||/^P\d+$/i.test(r.sub)?r.sub:"")+"|"+r.key;if(seen2[k])tdup.push([r.id,r.group,r.sub]);seen2[k]=1;}}
+  const spell=[];for(const r of rowsAll)for(const i of r.model)if(panels[i].aid!==r.id)spell.push([r.id,panels[i].aid,r.group]);
+  const odd=rowsAll.filter(r=>!COLOR[r.status]||(r.raw&&r.raw.trim()!==r.status));
+  const area=rowsAll.filter(r=>r.model.length===1&&panels[r.model[0]].area>0&&r.group!=="Panoramic lift"&&Math.abs(panels[r.model[0]].area-r.sqm)>0.05*r.sqm);
+  const sheets=[
+    {name:"Missing from tracker",rows:[["Activity ID","Level","Category","Model m²"],...mOnly.map(p=>[p.aid,p.level,p.cat,p.area?+p.area.toFixed(2):0])]},
+    {name:"Missing from model",rows:[["Activity ID","Group","Sub group","Status"],...tOnly.map(r=>[r.id,r.group,r.sub,r.status])]},
+    {name:"Dup in model",rows:[["Activity ID","Group","Model elements"],...dup.map(r=>[r.id,r.group,r.model.length])]},
+    {name:"Dup in tracker",rows:[["Activity ID","Group","Sub group"],...tdup]},
+    {name:"Spelling difference",rows:[["Tracker ID","Model ID","Group"],...spell]},
+    {name:"Status spelling",rows:[["Activity ID","As written","Counted as"],...odd.map(r=>[r.id,r.raw||"(blank)",r.status])]},
+    {name:"Area mismatch >5%",rows:[["Activity ID","Element","Tracker m²","Model m²"],...area.map(r=>[r.id,r.desc,+r.sqm.toFixed(2),+panels[r.model[0]].area.toFixed(2)])]}];
+  const blob=buildXlsx(sheets);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="data-checks.xlsx";a.click();}
 function drawChecks(){
   const box=$("checks");box.replaceChildren();
+  const dlBtn=el("button",{class:"btn",type:"button",style:"margin-bottom:12px"},"⬇ Download as Excel");dlBtn.onclick=downloadChecksXlsx;box.append(dlBtn);
   const card=(title,desc,cols,rows)=>{const c=el("div",{class:"card"},el("h2",null,title,el("span",{class:"count"},fmt(rows.length))),el("p",null,desc));
     if(rows.length){const t=el("table",null,el("thead",null,el("tr",null,...cols.map(h=>el("th",null,h)))));const tb=el("tbody");
       for(const r of rows){const tr=el("tr");r.forEach((v,i)=>tr.append(el("td",{class:i===0?"id":""},v)));tb.append(tr);}t.append(tb);c.append(el("div",{class:"tablebox",style:"max-height:300px"},t));}
@@ -535,7 +585,7 @@ function parseCSV(text){const out=[];let row=[],cur="",q=false;for(let i=0;i<tex
 function toTrackerRows(grid){const h=(grid[0]||[]).map(x=>String(x||"").trim().toLowerCase());
   const find=(...keys)=>h.findIndex(x=>keys.some(k=>x.includes(k)));
   const iId=find("activity id"),iSt=find("status"),iSq=find("sqm","area"),iG=find("full name","group"),iD=find("description"),iT=find("type");
-  let iS=h.findIndex((x,i)=>x==="sub group"||x==="subgroup");if(iS<0)iS=1;
+  let iS=h.findIndex((x,i)=>x==="sub group"||x==="subgroup");if(iS<0)iS=2;
   if(iId<0||iSt<0)throw new Error("Couldn't find the Activity ID and Status columns in the first row.");
   const rows=[];for(const r of grid.slice(1)){const id=String(r[iId]??"").trim();if(!id)continue;
     rows.push([String(r[iG]??"").trim(),String(r[iS]??"").trim(),String(r[iD]??"").trim(),String(r[iT]??"").trim(),id,+(r[iSq]??0)||0,String(r[iSt]??"").trim()]);}
