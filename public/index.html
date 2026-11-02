@@ -382,7 +382,7 @@ function applyAll(){
 }
 function drawLegend(counts){const L=$("legend");L.replaceChildren();for(const s of ORDER){if(!counts[s])continue;
   const active=F.status===s;
-  const d=el("div",{style:"cursor:pointer;opacity:"+(F.status&&!active?".4":"1")+";outline:"+(active?"2px solid var(--ink)":"none")+";border-radius:4px;padding:1px 4px"},el("i",{class:"sw",style:"background:"+COLOR[s]}),s);
+  const d=el("div",{style:"cursor:pointer;opacity:"+(F.status&&!active?".35":"1")+";outline:"+(active?"2px solid var(--ink)":"none")+";border-radius:4px;padding:1px 4px"},el("i",{class:"sw",style:"background:"+(F.status&&!active?"#aaa":COLOR[s])}),s);
   d.onclick=()=>{F.status=active?"":s;$("fStatus").value=F.status;applyAll();};
   L.append(d);}}
 function drawDonut(counts,total){
