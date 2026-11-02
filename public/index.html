@@ -222,8 +222,6 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
           <div class="kpis">
             <div class="kpi"><b id="kTracker">—</b><span>Panels in tracker</span></div>
             <div class="kpi"><b id="kInst">—</b><span>Installed (by count)</span></div>
-            <div class="kpi"><b id="kModel">—</b><span>Matched in model</span></div>
-            <div class="kpi warn"><b id="kUnm">—</b><span>Not matched</span></div>
           </div>
         </div>
         <div class="card">
@@ -374,7 +372,6 @@ function applyAll(){
   $("kTracker").textContent=fmt(rows.length);
   $("kInst").textContent=rows.length?p1(pct(inst,rows.length)):"—";
   $("kModel").textContent=fmt(matched);
-  $("kUnm").textContent=fmt(extra.length);
   $("shownTitle").textContent=fmt(rows.length+extra.length)+" panels shown";
   drawDonut(counts,rows.length+extra.length);
   drawTable(rows,extra);
