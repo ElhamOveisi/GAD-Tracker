@@ -118,6 +118,8 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .minibar div{height:100%}
 .caret{display:inline-block;width:12px;color:var(--muted)}
 .zero{color:var(--line)}
+.sumrow{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:12px}
+.summatrix-card{overflow-x:auto;max-height:320px;overflow-y:auto}
 .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
 .checks .card p{margin:0 0 8px;color:var(--muted);font-size:13px;max-width:65ch}
 .count{font:600 13px var(--font-ui);background:var(--soft);border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--ink)}
@@ -158,7 +160,6 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   <div class="filters">
     <nav class="tabs" role="tablist">
       <button role="tab" id="tab-model" aria-selected="true" data-view="model">3D Model</button>
-      <button role="tab" id="tab-summary" aria-selected="false" data-view="summary">Summary</button>
       <button role="tab" id="tab-checks" aria-selected="false" data-view="checks">Data Checks</button>
     </nav>
     <label for="fGroup">Group<select id="fGroup"></select></label>
@@ -200,6 +201,25 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   </div>
 
   <section id="view-model">
+    <div class="sumrow" id="sumrow">
+      <div class="card sumbar-card">
+        <div class="sumhead">
+          <h2 style="margin:0">Where the panels are</h2>
+          <div class="seg" role="group" aria-label="Measure">
+            <button type="button" id="mCount" aria-pressed="true">Panels</button>
+            <button type="button" id="mArea" aria-pressed="false">m²</button>
+          </div>
+        </div>
+        <div class="bigbar" id="bigbar"></div>
+        <div class="biglegend" id="biglegend"></div>
+      </div>
+      <div class="card matrix summatrix-card">
+        <table>
+          <thead id="mhead"></thead>
+          <tbody id="mbody"></tbody>
+        </table>
+      </div>
+    </div>
     <div class="grid3d">
       <div class="viewer" id="viewer">
         <canvas id="cv" aria-label="3D model of glass panels coloured by status"></canvas>
@@ -235,26 +255,6 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
           <div class="more" id="tMore"></div>
         </div>
       </aside>
-    </div>
-  </section>
-
-  <section id="view-summary" hidden>
-    <div class="card">
-      <div class="sumhead">
-        <h2 style="margin:0">Where the panels are</h2>
-        <div class="seg" role="group" aria-label="Measure">
-          <button type="button" id="mCount" aria-pressed="true">Panels</button>
-          <button type="button" id="mArea" aria-pressed="false">m²</button>
-        </div>
-      </div>
-      <div class="bigbar" id="bigbar"></div>
-      <div class="biglegend" id="biglegend"></div>
-    </div>
-    <div class="card matrix">
-      <table>
-        <thead id="mhead"></thead>
-        <tbody id="mbody"></tbody>
-      </table>
     </div>
   </section>
 
@@ -356,7 +356,7 @@ $("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.status=F.q="";$("fSearch")
 
 /* ---------- tabs ---------- */
 function showView(v){for(const b of document.querySelectorAll("nav.tabs button"))b.setAttribute("aria-selected",b.dataset.view===v);
-  for(const s of ["model","summary","checks"])$("view-"+s).hidden=s!==v;
+  for(const s of ["model","checks"])$("view-"+s).hidden=s!==v;
   if(v==="model"&&view3d)view3d.resize();
   try{history.replaceState(null,"","#"+v);}catch(e){}}
 for(const b of document.querySelectorAll("nav.tabs button"))b.onclick=()=>showView(b.dataset.view);
@@ -819,7 +819,7 @@ function createViewer(g){
 }
 
 /* ---------- boot ---------- */
-{const h=(location.hash||"").slice(1);if(["summary","checks"].includes(h))showView(h);}
+{const h=(location.hash||"").slice(1);if(["checks"].includes(h))showView(h);}
 (async()=>{
   try{
     const cfg=await fetch("data/config.json").then(r=>r.ok?r.json():{}).catch(()=>({}));
