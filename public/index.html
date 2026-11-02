@@ -528,7 +528,7 @@ function downloadChecksXlsx(){
   const blob=buildXlsx(sheets);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="data-checks.xlsx";a.click();}
 function drawChecks(){
   const box=$("checks");box.replaceChildren();
-  const dlBtn=el("button",{class:"btn",type:"button",style:"margin-bottom:12px"},"⬇ Download as Excel");dlBtn.onclick=downloadChecksXlsx;box.append(dlBtn);
+  if(SERVER.uploadsEnabled){const dlBtn=el("button",{class:"btn",type:"button",style:"margin-bottom:12px"},"⬇ Download as Excel");dlBtn.onclick=downloadChecksXlsx;box.append(dlBtn);}
   const card=(title,desc,cols,rows)=>{const c=el("div",{class:"card"},el("h2",null,title,el("span",{class:"count"},fmt(rows.length))),el("p",null,desc));
     if(rows.length){const t=el("table",null,el("thead",null,el("tr",null,...cols.map(h=>el("th",null,h)))));const tb=el("tbody");
       for(const r of rows){const tr=el("tr");r.forEach((v,i)=>tr.append(el("td",{class:i===0?"id":""},v)));tb.append(tr);}t.append(tb);c.append(el("div",{class:"tablebox",style:"max-height:300px"},t));}
