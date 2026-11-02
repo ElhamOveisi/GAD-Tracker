@@ -382,8 +382,7 @@ function applyAll(){
   drawSummary(); drawChecks();
   if(view3d)view3d.setVisible(p=>panelPass(p));
 }
-function drawLegend(counts){const L=$("legend");L.replaceChildren();for(const s of ORDER){if(!counts[s])continue;L.append(el("div",null,el("i",{class:"sw",style:"background:"+COLOR[s]}),s));}
-  L.append(el("div",null,el("i",{class:"sw",style:"background:var(--ghost);opacity:.5"}),"Filtered out"));}
+function drawLegend(counts){const L=$("legend");L.replaceChildren();for(const s of ORDER){if(!counts[s])continue;L.append(el("div",null,el("i",{class:"sw",style:"background:"+COLOR[s]}),s));}}
 function drawDonut(counts,total){
   const svg=$("donut");svg.replaceChildren();const NS="http://www.w3.org/2000/svg";const R=54,r=36,cx=66,cy=66;let a0=-Math.PI/2;
   const mk=(t,at)=>{const e=document.createElementNS(NS,t);for(const k in at)e.setAttribute(k,at[k]);return e;};
