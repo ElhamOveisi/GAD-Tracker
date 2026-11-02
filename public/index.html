@@ -374,7 +374,7 @@ function applyAll(){
   $("kTracker").textContent=fmt(rows.length);
   $("kInst").textContent=rows.length?p1(pct(inst,rows.length)):"—";
   $("kModel").textContent=fmt(matched);
-  $("kUnm").textContent=fmt(rows.filter(r=>!r.model.length&&!isExtraDup(r)).length+extra.length);
+  $("kUnm").textContent=fmt(extra.length);
   $("shownTitle").textContent=fmt(rows.length+extra.length)+" panels shown";
   drawDonut(counts,rows.length+extra.length);
   drawTable(rows,extra);
