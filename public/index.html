@@ -585,7 +585,7 @@ function parseCSV(text){const out=[];let row=[],cur="",q=false;for(let i=0;i<tex
 function toTrackerRows(grid){const h=(grid[0]||[]).map(x=>String(x||"").trim().toLowerCase());
   const find=(...keys)=>h.findIndex(x=>keys.some(k=>x.includes(k)));
   const iId=find("activity id"),iSt=find("status"),iSq=find("sqm","area"),iG=find("full name","group"),iD=find("description"),iT=find("type");
-  let iS=h.findIndex((x,i)=>x==="sub group"||x==="subgroup");if(iS<0)iS=2;
+  const iS=2;
   if(iId<0||iSt<0)throw new Error("Couldn't find the Activity ID and Status columns in the first row.");
   const rows=[];for(const r of grid.slice(1)){const id=String(r[iId]??"").trim();if(!id)continue;
     rows.push([String(r[iG]??"").trim(),String(r[iS]??"").trim(),String(r[iD]??"").trim(),String(r[iT]??"").trim(),id,+(r[iSq]??0)||0,String(r[iSt]??"").trim()]);}
