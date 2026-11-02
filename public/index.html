@@ -751,8 +751,8 @@ function createViewer(g){
   try{
     const cfg=await fetch("data/config.json").then(r=>r.ok?r.json():{}).catch(()=>({}));
     const tr=await fetchTracker();
-    if(SERVER.api){try{const s=await (await fetch("api/status",{cache:"no-store"})).json();SERVER.uploadsEnabled=!!s.uploadsEnabled;SERVER.persistent=!!s.persistent;}catch(e){}
-      try{const r=await fetch("api/model",{cache:"no-store"});if(r.ok)MODEL=await r.json();}catch(e){}}
+    try{const s=await (await fetch("api/status",{cache:"no-store"})).json();SERVER.uploadsEnabled=!!s.uploadsEnabled;SERVER.persistent=!!s.persistent;SERVER.api=SERVER.api||!!s.uploadsEnabled;}catch(e){}
+    if(SERVER.api){try{const r=await fetch("api/model",{cache:"no-store"});if(r.ok)MODEL=await r.json();}catch(e){}}
     const base=MODEL?`api/model/files/${encodeURIComponent(MODEL.id)}/`:"data/";
     const meta=await fetch(base+"meta.json").then(r=>{if(!r.ok)throw new Error("model data not found");return r.json();});
     META=meta;$("oldModelNote").hidden=!(META.length&&META[0].length<7);$("stamp").textContent=MODEL?`Model: ${MODEL.source} · ${fmt(MODEL.panels||META.length)} panels · loaded ${when(MODEL.savedAt)}`:(cfg.stamp||"");
