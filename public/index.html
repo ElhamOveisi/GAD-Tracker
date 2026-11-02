@@ -220,8 +220,8 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
         <div class="card">
           <h2 id="shownTitle">Panels shown</h2>
           <div class="kpis">
-            <div class="kpi"><b id="kTracker">—</b><span>Panels in tracker</span></div>
-            <div class="kpi"><b id="kInst">—</b><span>Installed (by count)</span></div>
+            <div class="kpi"><b id="kTracker">—</b><span id="kTrackerLabel">Panels shown</span></div>
+            <div class="kpi"><b id="kInst">—</b><span>Installed (of shown)</span></div>
           </div>
         </div>
         <div class="card">
@@ -367,9 +367,11 @@ function applyAll(){
   const extra=panels.filter(p=>!p.row&&panelPass(p));
   const counts={};for(const r of rows)counts[r.status]=(counts[r.status]||0)+1;
   if(extra.length)counts[NOT_IN_TRACKER[0]]=extra.length;
-  const matched=rows.filter(r=>r.model.length).length;
   const inst=counts["Installed"]||0;
-  $("kTracker").textContent=fmt(rows.length);
+  const totalAll=rowsAll.length+panels.filter(p=>!p.row).length;
+  const shownAll=rows.length+extra.length;
+  const isFiltered=Object.values(F).some(Boolean);
+  $("kTracker").textContent=isFiltered?fmt(shownAll)+" / "+fmt(totalAll):fmt(shownAll);
   $("kInst").textContent=rows.length?p1(pct(inst,rows.length)):"—";
   $("shownTitle").textContent=fmt(rows.length+extra.length)+" panels shown";
   drawDonut(counts,rows.length+extra.length);
