@@ -66,7 +66,7 @@ def tracker(xlsx):
         return -1
     iId, iSt, iSq = find('activity id'), find('status'), find('sqm', 'area')
     iG, iD, iT = find('full name', 'group'), find('description'), find('type')
-    iS = next((i for i, x in enumerate(h) if x in ('sub group', 'subgroup')), 1)
+    iS = next((i for i, x in enumerate(h) if x in ('sub group', 'subgroup')), 2)
     if iId < 0 or iSt < 0: sys.exit('Tracker: could not find the Activity ID and Status columns in row 1')
     g = lambda r, i: '' if i < 0 or r[i] is None else str(r[i]).strip()
     out = []
