@@ -483,7 +483,13 @@ function drawChecks(){
   card("In the tracker, missing from the model","Tracker rows with no matching panel in the IFC.",["Activity ID","Group","Sub group","Status"],tOnly.map(r=>[r.id,r.group,r.sub,r.status]));
   const dup=rowsAll.filter(r=>r.model.length>1);
   card("Duplicate panels in the model","One tracker row matched by more than one model element.",["Activity ID","Group","Model elements"],dup.map(r=>[r.id,r.group,String(r.model.length)]));
-  const seen={};const tdup=[];for(const r of rowsAll){const k=(LIFT_SUBS.has(r.sub)?r.sub:"")+"|"+r.key;if(seen[k])tdup.push([r.id,r.group,r.sub]);seen[k]=1;}
+  const byKey={};for(const r of rowsAll){if(!byKey[r.key])byKey[r.key]=[];byKey[r.key].push(r);}
+  const tdup=[];for(const key in byKey){const grp=byKey[key];if(grp.length<2)continue;
+    // not a duplicate if every row is in a distinct lift sub (P1–P4 or any sub containing a digit after P)
+    const subs=grp.map(r=>r.sub);const allDiffLifts=subs.every(s=>LIFT_SUBS.has(s)||/^P\d+$/i.test(s))&&new Set(subs).size===subs.length;
+    if(allDiffLifts)continue;
+    // flag rows that are genuine duplicates (same sub or non-lift)
+    const seen2={};for(const r of grp){const k=(LIFT_SUBS.has(r.sub)||/^P\d+$/i.test(r.sub)?r.sub:"")+"|"+r.key;if(seen2[k])tdup.push([r.id,r.group,r.sub]);seen2[k]=1;}}
   card("Duplicate Activity IDs in the tracker","The same Activity ID on more than one row (lifts P1–P4 may share IDs, so those are only counted within one lift).",["Activity ID","Group","Sub group"],tdup);
   const spell=[];for(const r of rowsAll)for(const i of r.model)if(panels[i].aid!==r.id)spell.push([r.id,panels[i].aid,r.group]);
   card("Matched despite a spelling difference","Tracker and model IDs that differ only in capitals, dash type or spaces. They are matched, but worth making identical.",["Tracker ID","Model ID","Group"],spell);
