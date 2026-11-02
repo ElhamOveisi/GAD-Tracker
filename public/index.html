@@ -297,6 +297,7 @@ let META=[]; // [aid, liftNote, guid, modelArea, type]
 let TRACKER=[]; let SOURCE="";
 let panels=[]; // per model panel: {aid,note,guid,area,type,row}
 let rowsAll=[]; // tracker rows enriched: {group,sub,desc,type,id,sqm,status,level,cat,model:[panelIdx]}
+let rowsFiltered=[]; // current filtered subset used by both drawTable and drawSummary
 // a repeated tracker row whose twin is already matched to the panel: a tracker duplicate, not a missing panel
 function isExtraDup(r){return !LIFT_SUBS.has(r.sub)&&rowsAll.some(o=>o!==r&&o.key===r.key&&o.model.length);}
 function normId(s){return String(s||"").normalize("NFKC").toUpperCase().replace(/[\u2010-\u2015\u2212\uFE58\uFE63\uFF0D]/g,"-").replace(/\s+/g,"");}
@@ -364,7 +365,7 @@ for(const b of document.querySelectorAll("nav.tabs button"))b.onclick=()=>showVi
 /* ---------- side panel ---------- */
 let selected=null; // tracker row or panel
 function applyAll(){
-  const rows=rowsAll.filter(rowPass);
+  const rows=rowsAll.filter(rowPass);rowsFiltered=rows;
   const extra=panels.filter(p=>!p.row&&panelPass(p));
   const counts={};for(const r of rows)counts[r.status]=(counts[r.status]||0)+1;
   if(extra.length)counts[NOT_IN_TRACKER[0]]=extra.length;
@@ -450,9 +451,9 @@ function agg(rows){const o={n:0,a:0,s:{}};for(const r of rows){const v=measure==
 function fmtV(v){return measure==="count"?fmt(Math.round(v)):fmt(Math.round(v));}
 function minibar(o){const d=el("div",{class:"minibar"});for(const s of ORDER){const v=o.s[s]||0;if(v)d.append(el("div",{style:`width:${pct(v,o.n)}%;background:${COLOR[s]}`,title:`${s}: ${p1(pct(v,o.n))}`}));}return d;}
 function drawSummary(){
-  const rows=rowsAll.filter(placePass);
-  const tot=agg(rows); const sts=ORDER.filter(s=>rowsAll.some(r=>r.status===s));
-  for(const r of rowsAll)if(!sts.includes(r.status))sts.push(r.status);
+  const rows=rowsFiltered;
+  const tot=agg(rows); const sts=ORDER.filter(s=>rows.some(r=>r.status===s));
+  for(const r of rows)if(!sts.includes(r.status))sts.push(r.status);
   const bb=$("bigbar");bb.replaceChildren();const bl=$("biglegend");bl.replaceChildren();
   for(const s of sts){const v=tot.s[s]||0;if(!v)continue;bb.append(el("div",{style:`width:${pct(v,tot.n)}%;background:${COLOR[s]||"#888"}`,title:s}));
     bl.append(el("span",null,el("i",{class:"sw",style:"background:"+(COLOR[s]||"#888")}),s+" ",el("b",null,p1(pct(v,tot.n))),el("small",{style:"color:var(--muted)"}," "+fmtV(v)+(measure==="area"?" m²":""))));}
