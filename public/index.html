@@ -875,7 +875,7 @@ function createViewer(g){
   // camera
   const radius=Math.hypot(...sub(mx,mn))/2;
   let cam={tgt:[0,0,0],yaw:-0.75,pitch:0.6,dist:radius*2.2,ortho:false};
-  let visible=new Uint8Array(n).fill(1),hl=new Set(),showGhost=true;
+  let visible=new Uint8Array(n).fill(1),hl=new Set(),showGhost=true,hideFiltered=false;
   const ghostRGB=()=>{const c=getComputedStyle(document.documentElement).getPropertyValue("--ghost").trim()||"#9aa6b2";return hexRGB(c).map(x=>x/255);};
   const bgRGB=()=>{const c=getComputedStyle($("viewer")).backgroundColor.match(/\d+/g)||[228,233,238];return c.slice(0,3).map(x=>x/255);};
   let dirty=true;
@@ -898,7 +898,7 @@ function createViewer(g){
   function recolor(){
     for(let p=0;p<n;p++){const st=panelStatus(panels[p]);let c=hexRGB(COLOR[st]||"#888888");if(hl.has(p))c=[255,214,10];for(let v=vStart[p];v<vStart[p+1];v++){col[v*3]=c[0];col[v*3+1]=c[1];col[v*3+2]=c[2];}}
     gl.bindBuffer(gl.ARRAY_BUFFER,colBuf);gl.bufferSubData(gl.ARRAY_BUFFER,0,col);dirty=true;}
-  function rebuild(){nA=0;nG=0;for(let p=0;p<n;p++){const a=tStart[p]*3,b=tStart[p+1]*3;if(visible[p]||hl.has(p)){idxA.set(gidx.subarray(a,b),nA);nA+=b-a;}else{idxG.set(gidx.subarray(a,b),nG);nG+=b-a;}}
+  function rebuild(){nA=0;nG=0;for(let p=0;p<n;p++){const a=tStart[p]*3,b=tStart[p+1]*3;if(visible[p]||hl.has(p)){idxA.set(gidx.subarray(a,b),nA);nA+=b-a;}else if(!hideFiltered){idxG.set(gidx.subarray(a,b),nG);nG+=b-a;}}
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibA);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idxA.subarray(0,nA),gl.DYNAMIC_DRAW);
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER,ibG);gl.bufferData(gl.ELEMENT_ARRAY_BUFFER,idxG.subarray(0,nG),gl.DYNAMIC_DRAW);dirty=true;}
   function boxOf(list){let a=[1e30,1e30,1e30],b=[-1e30,-1e30,-1e30];for(const p of list){const [pa,pb]=bbox[p];for(let k=0;k<3;k++){a[k]=Math.min(a[k],pa[k]);b[k]=Math.max(b[k],pb[k]);}}return[a,b];}
@@ -921,7 +921,14 @@ function createViewer(g){
   const up=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2&&drag)drag.pd=null;if(!ptrs.size){if(drag&&moved<5&&e.type==="pointerup"){const p=pickAt(e.clientX,e.clientY);onPick(p,false);}drag=null;}};
   cv.addEventListener("pointerup",up);cv.addEventListener("pointercancel",up);
   cv.addEventListener("dblclick",e=>{const p=pickAt(e.clientX,e.clientY);if(p>=0){onPick(p,true);}});
-  cv.addEventListener("wheel",e=>{e.preventDefault();cam.dist*=Math.exp(e.deltaY*0.0012);cam.dist=Math.max(0.3,Math.min(radius*8,cam.dist));dirty=true;},{passive:false});
+  cv.addEventListener("wheel",e=>{e.preventDefault();
+    // Normalise deltaY across pixel/line/page modes
+    let dy=e.deltaY;
+    if(e.deltaMode===1)dy*=16;else if(e.deltaMode===2)dy*=400;
+    // Faster sensitivity, wider zoom range
+    cam.dist*=Math.exp(dy*0.003);
+    cam.dist=Math.max(0.1,Math.min(radius*20,cam.dist));
+    dirty=true;},{passive:false});
   function panBy(dx,dy){const e=eye();const f=norm(sub(cam.tgt,e));const r=norm(cross(f,[0,0,1]));const u=cross(r,f);const k=cam.dist*0.0016*(1000/Math.max(cv.clientHeight,300));
     cam.tgt=add(cam.tgt,add(scl(r,-dx*k),scl(u,dy*k)));}
   let onPick=()=>{};
@@ -933,7 +940,7 @@ function createViewer(g){
     focus(list){frame(list);cam.dist=Math.max(cam.dist,3);},
     fit(){const list=[];for(let p=0;p<n;p++)if(visible[p])list.push(p);frame(list.length?list:[...Array(n).keys()]);},
     view(v){if(v==="fit"){api.fit();return;}const [y,p]=views[v];cam.yaw=y;cam.pitch=p;api.fit();},
-    ghost(on){showGhost=on;dirty=true;},
+    ghost(on){showGhost=on;hideFiltered=!on;rebuild();dirty=true;},
     set onPick(f){onPick=f;},
     redraw(){dirty=true;}
   };
