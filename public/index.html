@@ -641,15 +641,13 @@ function downloadChecksXlsx(){
     const seen2={};for(const r of grp){const k=(LIFT_SUBS.has(r.sub)||/^P\d+$/i.test(r.sub)?r.sub:"")+"|"+r.key;if(seen2[k])tdup.push([r.id,r.group,r.sub]);seen2[k]=1;}}
   const spell=[];for(const r of rowsAll)for(const i of r.model)if(panels[i].aid!==r.id)spell.push([r.id,panels[i].aid,r.group]);
   const odd=rowsAll.filter(r=>!COLOR[r.status]||(r.raw&&r.raw.trim()!==r.status));
-  const area=rowsAll.filter(r=>r.model.length===1&&panels[r.model[0]].area>0&&r.group!=="Panoramic lift"&&Math.abs(panels[r.model[0]].area-r.sqm)>0.05*r.sqm);
   const sheets=[
     {name:"Missing from tracker",rows:[["Activity ID","Level","Category","Model m²"],...mOnly.map(p=>[p.aid,p.level,p.cat,p.area?+p.area.toFixed(2):0])]},
     {name:"Missing from model",rows:[["Activity ID","Group","Sub group","Status"],...tOnly.map(r=>[r.id,r.group,r.sub,r.status])]},
     {name:"Dup in model",rows:[["Activity ID","Group","Model elements"],...dup.map(r=>[r.id,r.group,r.model.length])]},
     {name:"Dup in tracker",rows:[["Activity ID","Group","Sub group"],...tdup]},
     {name:"Spelling difference",rows:[["Tracker ID","Model ID","Group"],...spell]},
-    {name:"Status spelling",rows:[["Activity ID","As written","Counted as"],...odd.map(r=>[r.id,r.raw||"(blank)",r.status])]},
-    {name:"Area mismatch >5%",rows:[["Activity ID","Element","Tracker m²","Model m²"],...area.map(r=>[r.id,r.desc,+r.sqm.toFixed(2),+panels[r.model[0]].area.toFixed(2)])]}];
+    {name:"Status spelling",rows:[["Activity ID","As written","Counted as"],...odd.map(r=>[r.id,r.raw||"(blank)",r.status])]}];
   const blob=buildXlsx(sheets);const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="data-checks.xlsx";a.click();}
 function drawChecks(){
   const box=$("checks");box.replaceChildren();
@@ -676,8 +674,6 @@ function drawChecks(){
   card("Matched despite a spelling difference","Tracker and model IDs that differ only in capitals, dash type or spaces. They are matched, but worth making identical.",["Tracker ID","Model ID","Group"],spell);
   const odd=rowsAll.filter(r=>!COLOR[r.status]||(r.raw&&r.raw.trim()!==r.status));
   card("Status spelling","Statuses that don't match the standard list exactly. They are counted under the closest standard status where one exists.",["Activity ID","As written","Counted as"],odd.map(r=>[r.id,r.raw||"(blank)",r.status]));
-  const area=rowsAll.filter(r=>r.model.length===1&&panels[r.model[0]].area>0&&r.group!=="Panoramic lift"&&Math.abs(panels[r.model[0]].area-r.sqm)>0.05*r.sqm);
-  card("Area differs by more than 5%","Tracker m² compared with the Revit Area of the matched panel. Lift panels are skipped because their model area isn't usable.",["Activity ID","Element","Tracker m²","Model m²"],area.map(r=>[r.id,r.desc,r.sqm.toFixed(2),panels[r.model[0]].area.toFixed(2)]));
 }
 
 /* ---------- upload ---------- */
