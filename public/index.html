@@ -277,6 +277,11 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
         <h2 style="margin:0">Panel Notes</h2>
         <button class="btn" type="button" id="dlNotesBtn">⬇ Download (Excel)</button>
       </div>
+      <div id="notesAdminRow" style="display:none;margin-bottom:10px;display:flex;gap:8px;align-items:center">
+        <input id="notesAdminKey" type="password" placeholder="Upload password to edit/delete" autocomplete="off" style="font:13px var(--font-ui);color:var(--ink);background:var(--soft);border:1px solid var(--line);border-radius:5px;padding:5px 8px;width:220px">
+        <button class="btn" type="button" id="notesAdminBtn">Unlock</button>
+        <span id="notesAdminMsg" style="font-size:12px;color:var(--muted)"></span>
+      </div>
       <div id="allNotesList"><p style="color:var(--muted);font-size:13px">Loading notes…</p></div>
     </div>
     <div class="checks" id="checks"></div>
@@ -381,31 +386,59 @@ function showView(v){for(const b of document.querySelectorAll("nav.tabs button")
   if(v==="model"&&view3d)view3d.resize();
   if(v==="checks")loadAllNotes();
   try{history.replaceState(null,"","#"+v);}catch(e){}}
+let notesAdminKey="";
 async function loadAllNotes(){
   const wrap=$("allNotesList");
+  $("notesAdminRow").style.display="flex";
   try{
     const all=await fetch("api/notes/export?json=1").then(r=>r.json());
     const entries=Object.entries(all);
     if(!entries.length){wrap.innerHTML='<p style="color:var(--muted);font-size:13px">No notes added yet.</p>';return;}
-    // flatten and sort newest first
-    const flat=[];for(const [id,notes] of entries)for(const n of notes)flat.push({id,...n});
+    const flat=[];for(const [id,notes] of entries)for(let i=0;i<notes.length;i++)flat.push({id,idx:i,...notes[i]});
     flat.sort((a,b)=>b.at.localeCompare(a.at));
     wrap.replaceChildren();
+    const cols=["Panel ID","Note","Author","Date / Time"];
+    if(notesAdminKey)cols.push("");
     const tbl=el("table",{style:"width:100%;border-collapse:collapse;font-size:13px"});
-    const hdr=el("tr",null,...["Panel ID","Note","Author","Date / Time"].map(h=>el("th",{style:"text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap"},h)));
-    tbl.append(hdr);
+    tbl.append(el("tr",null,...cols.map(h=>el("th",{style:"text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap"},h))));
     for(const n of flat){
-      const tr=el("tr",{style:"border-bottom:1px solid var(--line);cursor:pointer"},
-        el("td",{style:"padding:6px 10px;white-space:nowrap;font-weight:600"},n.id),
-        el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"},n.text),
+      const textCell=el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"},n.text);
+      if(n.editedAt)textCell.append(el("span",{style:"font-size:11px;color:var(--muted);margin-left:6px"},"(edited)"));
+      const tr=el("tr",{style:"border-bottom:1px solid var(--line)"},
+        el("td",{style:"padding:6px 10px;white-space:nowrap;font-weight:600;cursor:pointer"},n.id),
+        textCell,
         el("td",{style:"padding:6px 10px;white-space:nowrap"},n.name),
         el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
-      tr.onclick=()=>{const r=rowsAll.find(x=>x.id===n.id);if(r){showView("model");select(r,true);}};
+      tr.firstChild.onclick=()=>{const r=rowsAll.find(x=>x.id===n.id);if(r){showView("model");select(r,true);}};
+      if(notesAdminKey){
+        const editBtn=el("button",{type:"button",class:"btn",style:"font-size:11px;padding:2px 8px;margin-right:4px"},"Edit");
+        const delBtn=el("button",{type:"button",class:"btn",style:"font-size:11px;padding:2px 8px;background:#c0392b;color:#fff;border-color:#c0392b"},"Delete");
+        editBtn.onclick=async()=>{
+          const newText=prompt("Edit note:",n.text);if(newText==null||!newText.trim())return;
+          const r=await fetch("api/notes/admin/edit",{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":notesAdminKey},body:JSON.stringify({panelId:n.id,idx:n.idx,text:newText.trim()})});
+          if(r.ok)loadAllNotes();else alert("Failed: "+(await r.json()).error);
+        };
+        delBtn.onclick=async()=>{
+          if(!confirm("Delete this note by "+n.name+"?"))return;
+          const r=await fetch("api/notes/admin/delete",{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":notesAdminKey},body:JSON.stringify({panelId:n.id,idx:n.idx})});
+          if(r.ok)loadAllNotes();else alert("Failed: "+(await r.json()).error);
+        };
+        tr.append(el("td",{style:"padding:4px 10px;white-space:nowrap"},editBtn,delBtn));
+      }
       tbl.append(tr);
     }
     wrap.append(tbl);
   }catch{wrap.innerHTML='<p style="color:var(--muted);font-size:13px">Could not load notes.</p>';}
 }
+$("notesAdminBtn").onclick=async()=>{
+  const key=$("notesAdminKey").value.trim();
+  if(!key)return;
+  // Verify key by trying a harmless request
+  const r=await fetch("api/notes/admin/edit",{method:"POST",headers:{"Content-Type":"application/json","x-upload-key":key},body:JSON.stringify({panelId:"__test__",idx:0,text:"x"})});
+  if(r.status===401){$("notesAdminMsg").textContent="Wrong password.";$("notesAdminMsg").style.color="#c0392b";return;}
+  notesAdminKey=key;$("notesAdminMsg").textContent="Unlocked — edit/delete buttons are now visible.";$("notesAdminMsg").style.color="var(--muted)";
+  $("notesAdminKey").value="";loadAllNotes();
+};
 for(const b of document.querySelectorAll("nav.tabs button"))b.onclick=()=>showView(b.dataset.view);
 
 /* ---------- side panel ---------- */

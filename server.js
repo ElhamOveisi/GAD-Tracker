@@ -356,6 +356,34 @@ async function api(req, res, p) {
     res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="panel-notes.csv"', "Cache-Control": "no-store" });
     return res.end("﻿" + lines.join("\r\n") + "\r\n");
   }
+  // Admin: edit a note (requires upload key)
+  if (p === "/api/notes/admin/edit" && req.method === "POST") {
+    if (!keyOK(req)) return send(res, 401, { error: "Wrong upload password." });
+    const body = await readBody(req);
+    let data; try { data = JSON.parse(body); } catch { return send(res, 400, { error: "Bad JSON" }); }
+    const { panelId, idx, text } = data;
+    const newText = String(text || "").trim().slice(0, 2000);
+    if (!newText) return send(res, 400, { error: "Note text is required." });
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    if (!all[panelId] || !all[panelId][idx]) return send(res, 404, { error: "Note not found." });
+    all[panelId][idx].text = newText;
+    all[panelId][idx].editedAt = new Date().toISOString();
+    fs.writeFileSync(NOTES, JSON.stringify(all));
+    return send(res, 200, { ok: true });
+  }
+  // Admin: delete a note (requires upload key)
+  if (p === "/api/notes/admin/delete" && req.method === "POST") {
+    if (!keyOK(req)) return send(res, 401, { error: "Wrong upload password." });
+    const body = await readBody(req);
+    let data; try { data = JSON.parse(body); } catch { return send(res, 400, { error: "Bad JSON" }); }
+    const { panelId, idx } = data;
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    if (!all[panelId] || !all[panelId][idx]) return send(res, 404, { error: "Note not found." });
+    all[panelId].splice(idx, 1);
+    if (!all[panelId].length) delete all[panelId];
+    fs.writeFileSync(NOTES, JSON.stringify(all));
+    return send(res, 200, { ok: true });
+  }
   // Panel notes — read open to all, write requires name+password
   const noteGet = p.match(/^\/api\/notes\/(.+)$/);
   if (noteGet && req.method === "GET") {
