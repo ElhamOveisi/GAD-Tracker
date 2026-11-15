@@ -341,9 +341,11 @@ async function api(req, res, p) {
   if (p === "/api/notes-users" && req.method === "GET") {
     return send(res, 200, NOTES_USERS.map(u => u.name));
   }
-  // Download all notes as CSV (Excel-compatible)
+  // Download all notes as CSV (Excel-compatible) or JSON for in-page list
   if (p === "/api/notes/export" && req.method === "GET") {
     const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    const wantsJson = (new URL(req.url, "http://x")).searchParams.get("json") === "1";
+    if (wantsJson) return send(res, 200, all);
     const cell = v => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const lines = [["Activity ID","Note","Author","Date/Time"].join(",")];
     for (const [id, notes] of Object.entries(all)) {

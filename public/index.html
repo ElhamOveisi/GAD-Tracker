@@ -272,7 +272,13 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   </section>
 
   <section id="view-checks" hidden>
-    <div style="margin-bottom:12px"><button class="btn" type="button" id="dlNotesBtn">⬇ Download all notes (Excel)</button></div>
+    <div class="card" id="allNotesCard" style="margin-bottom:12px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">
+        <h2 style="margin:0">Panel Notes</h2>
+        <button class="btn" type="button" id="dlNotesBtn">⬇ Download (Excel)</button>
+      </div>
+      <div id="allNotesList"><p style="color:var(--muted);font-size:13px">Loading notes…</p></div>
+    </div>
     <div class="checks" id="checks"></div>
     <div class="card hist" id="restoreBox" hidden>
       <label for="restoreKey" class="srcnote">Upload password, needed to download or restore a version below</label>
@@ -373,7 +379,33 @@ $("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.status=F.q="";$("fSearch")
 function showView(v){for(const b of document.querySelectorAll("nav.tabs button"))b.setAttribute("aria-selected",b.dataset.view===v);
   for(const s of ["model","checks"])$("view-"+s).hidden=s!==v;
   if(v==="model"&&view3d)view3d.resize();
+  if(v==="checks")loadAllNotes();
   try{history.replaceState(null,"","#"+v);}catch(e){}}
+async function loadAllNotes(){
+  const wrap=$("allNotesList");
+  try{
+    const all=await fetch("api/notes/export?json=1").then(r=>r.json());
+    const entries=Object.entries(all);
+    if(!entries.length){wrap.innerHTML='<p style="color:var(--muted);font-size:13px">No notes added yet.</p>';return;}
+    // flatten and sort newest first
+    const flat=[];for(const [id,notes] of entries)for(const n of notes)flat.push({id,...n});
+    flat.sort((a,b)=>b.at.localeCompare(a.at));
+    wrap.replaceChildren();
+    const tbl=el("table",{style:"width:100%;border-collapse:collapse;font-size:13px"});
+    const hdr=el("tr",null,...["Panel ID","Note","Author","Date / Time"].map(h=>el("th",{style:"text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap"},h)));
+    tbl.append(hdr);
+    for(const n of flat){
+      const tr=el("tr",{style:"border-bottom:1px solid var(--line);cursor:pointer"},
+        el("td",{style:"padding:6px 10px;white-space:nowrap;font-weight:600"},n.id),
+        el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"},n.text),
+        el("td",{style:"padding:6px 10px;white-space:nowrap"},n.name),
+        el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
+      tr.onclick=()=>{const r=rowsAll.find(x=>x.id===n.id);if(r){showView("model");select(r,true);}};
+      tbl.append(tr);
+    }
+    wrap.append(tbl);
+  }catch{wrap.innerHTML='<p style="color:var(--muted);font-size:13px">Could not load notes.</p>';}
+}
 for(const b of document.querySelectorAll("nav.tabs button"))b.onclick=()=>showView(b.dataset.view);
 
 /* ---------- side panel ---------- */
