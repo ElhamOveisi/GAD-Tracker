@@ -272,6 +272,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
   </section>
 
   <section id="view-checks" hidden>
+    <div style="margin-bottom:12px"><button class="btn" type="button" id="dlNotesBtn">⬇ Download all notes (Excel)</button></div>
     <div class="checks" id="checks"></div>
     <div class="card hist" id="restoreBox" hidden>
       <label for="restoreKey" class="srcnote">Upload password, needed to download or restore a version below</label>
@@ -456,45 +457,46 @@ function select(obj,zoom){
   const notesTitle=el("h4",{class:"notes-heading"},"Notes");
   const notesList=el("div",{class:"notes-list"});
   notesWrap.append(notesTitle,notesList);
-  // Load existing notes
-  fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json()).then(notes=>{
+  // Load existing notes (populated after reloadNotes is defined below)
+  // Add note form
+  const nameSelect=el("select",{class:"note-name"});
+  nameSelect.append(el("option",{value:""},"— Select your name —"));
+  fetch("api/notes-users").then(r=>r.json()).then(names=>{for(const n of names)nameSelect.append(el("option",{value:n},n));}).catch(()=>{});
+  const passIn=el("input",{type:"password",placeholder:"Your password",class:"note-name",maxlength:"80"});
+  const textIn=el("textarea",{placeholder:"Add a note…",class:"note-textarea",maxlength:"2000",rows:"3"});
+  const saveBtn=el("button",{type:"button",class:"btn note-save"},"Save note");
+  const errMsg=el("p",{class:"note-err",style:"display:none"});
+  const reloadNotes=async()=>{
+    const updated=await fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json());
     notesList.replaceChildren();
-    if(!notes.length){notesList.append(el("p",{class:"notes-empty"},"No notes yet."));}
-    else{for(const n of notes){
+    if(!updated.length){notesList.append(el("p",{class:"notes-empty"},"No notes yet."));}
+    else{for(const n of updated){
       const d=el("div",{class:"note-item"});
       d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
       d.append(el("p",{class:"note-text"},n.text));
       notesList.append(d);
     }}
-  }).catch(()=>{});
-  // Add note form
-  const nameIn=el("input",{type:"text",placeholder:"Your name",class:"note-name",maxlength:"80"});
-  const textIn=el("textarea",{placeholder:"Add a note…",class:"note-textarea",maxlength:"2000",rows:"3"});
-  const saveBtn=el("button",{type:"button",class:"btn note-save"},"Save note");
-  const errMsg=el("p",{class:"note-err",style:"display:none"});
+  };
   saveBtn.onclick=async()=>{
-    const name=nameIn.value.trim()||"Anonymous";
+    const name=nameSelect.value;
+    const password=passIn.value.trim();
     const text=textIn.value.trim();
+    if(!name){errMsg.textContent="Please select your name.";errMsg.style.display="";return;}
+    if(!password){errMsg.textContent="Please enter your password.";errMsg.style.display="";return;}
     if(!text){errMsg.textContent="Please enter a note.";errMsg.style.display="";return;}
     saveBtn.disabled=true;saveBtn.textContent="Saving…";errMsg.style.display="none";
     try{
-      const r=await fetch("api/notes/"+encodeURIComponent(panelId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,text})});
-      if(!r.ok)throw new Error();
-      textIn.value="";
-      // Reload notes
-      const updated=await fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json());
-      notesList.replaceChildren();
-      for(const n of updated){
-        const d=el("div",{class:"note-item"});
-        d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
-        d.append(el("p",{class:"note-text"},n.text));
-        notesList.append(d);
-      }
+      const r=await fetch("api/notes/"+encodeURIComponent(panelId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,password,text})});
+      const data=await r.json();
+      if(!r.ok){errMsg.textContent=data.error||"Failed to save.";errMsg.style.display="";saveBtn.disabled=false;saveBtn.textContent="Save note";return;}
+      textIn.value="";passIn.value="";
+      await reloadNotes();
     }catch{errMsg.textContent="Failed to save. Try again.";errMsg.style.display="";}
     saveBtn.disabled=false;saveBtn.textContent="Save note";
   };
-  const noteForm=el("div",{class:"note-form"},nameIn,textIn,errMsg,saveBtn);
+  const noteForm=el("div",{class:"note-form"},nameSelect,passIn,textIn,errMsg,saveBtn);
   notesWrap.append(noteForm);
+  reloadNotes().catch(()=>{});
   info.replaceChildren(el("h3",null,panelId,close),dl,notesWrap);info.hidden=false;
   if(view3d){view3d.highlight(pidx);if(zoom&&pidx.length)view3d.focus(pidx);}
   for(const tr of $("tbody").children)if(tr.firstChild.textContent===panelId)tr.classList.add("sel");
@@ -897,6 +899,7 @@ function createViewer(g){
     $("ghostBtn").onclick=()=>{const on=$("ghostBtn").getAttribute("aria-pressed")!=="true";$("ghostBtn").setAttribute("aria-pressed",on);view3d.ghost(on);};
   }catch(err){$("loading").textContent="The 3D view couldn't start in this browser ("+err.message+"). The Summary and Data Checks tabs still work.";}
 })();
+$("dlNotesBtn").onclick=()=>{const a=document.createElement("a");a.href="api/notes/export";a.download="panel-notes.csv";a.click();};
 </script>
 
 </body>

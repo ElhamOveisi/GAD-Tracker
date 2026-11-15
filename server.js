@@ -43,6 +43,15 @@ const PORT = process.env.PORT || 3000;
 const UPLOAD_KEY = process.env.UPLOAD_KEY || "";
 const MAX_BODY = 20 * 1024 * 1024;
 const ON_VOLUME = Boolean(process.env.RAILWAY_VOLUME_MOUNT_PATH || process.env.DATA_DIR);
+// NOTES_USERS: JSON array of {name, password} — set in Railway environment variables
+let NOTES_USERS = [];
+try { NOTES_USERS = JSON.parse(process.env.NOTES_USERS || "[]"); } catch {}
+// Fallback hardcoded users (overridden by NOTES_USERS env var if set)
+if (!NOTES_USERS.length) NOTES_USERS = [
+  {name:"Elham",password:"GAD26"},{name:"David",password:"PD@1"},{name:"Chris",password:"PD@2"},
+  {name:"Ammar",password:"CM1"},{name:"Mahmoud",password:"CM11"},{name:"Raziq",password:"QS1"},
+  {name:"Shakeeb",password:"QC11"},{name:"Badr",password:"PM1"},{name:"Maxime",password:"PM11"}
+];
 
 const TYPES = {
   ".html": "text/html; charset=utf-8",
@@ -328,7 +337,24 @@ async function api(req, res, p) {
     const info = saveTracker(old.rows, { source: old.info.source, by: "restore", method: "restore", restoredFrom: m[1] });
     return send(res, 200, { ok: true, info });
   }
-  // Panel notes — open to all, no password required
+  // Notes user list (names only, no passwords)
+  if (p === "/api/notes-users" && req.method === "GET") {
+    return send(res, 200, NOTES_USERS.map(u => u.name));
+  }
+  // Download all notes as CSV (Excel-compatible)
+  if (p === "/api/notes/export" && req.method === "GET") {
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    const cell = v => { const s = String(v ?? ""); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const lines = [["Activity ID","Note","Author","Date/Time"].join(",")];
+    for (const [id, notes] of Object.entries(all)) {
+      for (const n of notes) {
+        lines.push([id, n.text, n.name, new Date(n.at).toLocaleString("en-GB")].map(cell).join(","));
+      }
+    }
+    res.writeHead(200, { "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": 'attachment; filename="panel-notes.csv"', "Cache-Control": "no-store" });
+    return res.end("﻿" + lines.join("\r\n") + "\r\n");
+  }
+  // Panel notes — read open to all, write requires name+password
   const noteGet = p.match(/^\/api\/notes\/(.+)$/);
   if (noteGet && req.method === "GET") {
     const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
@@ -338,9 +364,12 @@ async function api(req, res, p) {
   if (notePost && req.method === "POST") {
     const body = await readBody(req);
     let data; try { data = JSON.parse(body); } catch { return send(res, 400, { error: "Bad JSON" }); }
-    const name = String(data.name || "").trim().slice(0, 80) || "Anonymous";
+    const name = String(data.name || "").trim();
+    const password = String(data.password || "").trim();
     const text = String(data.text || "").trim().slice(0, 2000);
     if (!text) return send(res, 400, { error: "Note text is required." });
+    const user = NOTES_USERS.find(u => u.name === name && u.password === password);
+    if (!user) return send(res, 401, { error: "Wrong name or password." });
     const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
     const id = notePost[1];
     if (!all[id]) all[id] = [];
