@@ -29,6 +29,7 @@ const STORE =
   path.join(__dirname, "storage");
 const HISTORY = path.join(STORE, "history");
 const CURRENT = path.join(STORE, "tracker.json");
+const NOTES = path.join(STORE, "notes.json");
 const SEED = path.join(STORE, "seed.json");
 const MODELS = path.join(STORE, "models");
 const UPLOADS = path.join(STORE, "uploads");
@@ -326,6 +327,26 @@ async function api(req, res, p) {
     const old = readJSON(file);
     const info = saveTracker(old.rows, { source: old.info.source, by: "restore", method: "restore", restoredFrom: m[1] });
     return send(res, 200, { ok: true, info });
+  }
+  // Panel notes — open to all, no password required
+  const noteGet = p.match(/^\/api\/notes\/(.+)$/);
+  if (noteGet && req.method === "GET") {
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    return send(res, 200, all[noteGet[1]] || []);
+  }
+  const notePost = p.match(/^\/api\/notes\/(.+)$/);
+  if (notePost && req.method === "POST") {
+    const body = await readBody(req);
+    let data; try { data = JSON.parse(body); } catch { return send(res, 400, { error: "Bad JSON" }); }
+    const name = String(data.name || "").trim().slice(0, 80) || "Anonymous";
+    const text = String(data.text || "").trim().slice(0, 2000);
+    if (!text) return send(res, 400, { error: "Note text is required." });
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    const id = notePost[1];
+    if (!all[id]) all[id] = [];
+    all[id].push({ name, text, at: new Date().toISOString() });
+    fs.writeFileSync(NOTES, JSON.stringify(all));
+    return send(res, 200, { ok: true });
   }
   return send(res, 404, { error: "Not found" });
 }

@@ -120,6 +120,19 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .zero{color:var(--line)}
 .sumrow{display:grid;grid-template-columns:minmax(0,1fr);gap:12px;margin-bottom:12px}
 .summatrix-card{overflow-x:auto;max-height:320px;overflow-y:auto}
+.notes-wrap{margin-top:16px;border-top:1px solid var(--line);padding-top:12px}
+.notes-heading{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+.notes-list{display:flex;flex-direction:column;gap:8px;margin-bottom:12px}
+.notes-empty{font-size:13px;color:var(--muted);margin:0}
+.note-item{background:var(--hover,rgba(0,0,0,.04));border-radius:6px;padding:8px 10px}
+.note-author{font-size:12px;font-weight:600;margin-right:8px}
+.note-time{font-size:11px;color:var(--muted)}
+.note-text{margin:4px 0 0;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.note-form{display:flex;flex-direction:column;gap:6px}
+.note-name{width:100%;box-sizing:border-box;padding:5px 8px;border:1px solid var(--line);border-radius:5px;font-size:13px;background:var(--panel);color:var(--ink)}
+.note-textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font-size:13px;resize:vertical;background:var(--panel);color:var(--ink);font-family:inherit}
+.note-save{align-self:flex-end}
+.note-err{font-size:12px;color:#c0392b;margin:0}
 .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
 .checks .card p{margin:0 0 8px;color:var(--muted);font-size:13px;max-width:65ch}
 .count{font:600 13px var(--font-ui);background:var(--soft);border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--ink)}
@@ -437,10 +450,54 @@ function select(obj,zoom){
   else add("In model","No — not found in the IFC");
   if(pidx.length>1)add("Model elements",pidx.length+" (duplicate)");
   const close=el("button",{type:"button","aria-label":"Close"},"×");close.onclick=()=>select(null);
-  info.replaceChildren(el("h3",null,row?row.id:obj.aid,close),dl);info.hidden=false;
+  const panelId=row?row.id:obj.aid;
+  // Notes section
+  const notesWrap=el("div",{class:"notes-wrap"});
+  const notesTitle=el("h4",{class:"notes-heading"},"Notes");
+  const notesList=el("div",{class:"notes-list"});
+  notesWrap.append(notesTitle,notesList);
+  // Load existing notes
+  fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json()).then(notes=>{
+    notesList.replaceChildren();
+    if(!notes.length){notesList.append(el("p",{class:"notes-empty"},"No notes yet."));}
+    else{for(const n of notes){
+      const d=el("div",{class:"note-item"});
+      d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
+      d.append(el("p",{class:"note-text"},n.text));
+      notesList.append(d);
+    }}
+  }).catch(()=>{});
+  // Add note form
+  const nameIn=el("input",{type:"text",placeholder:"Your name",class:"note-name",maxlength:"80"});
+  const textIn=el("textarea",{placeholder:"Add a note…",class:"note-textarea",maxlength:"2000",rows:"3"});
+  const saveBtn=el("button",{type:"button",class:"btn note-save"},"Save note");
+  const errMsg=el("p",{class:"note-err",style:"display:none"});
+  saveBtn.onclick=async()=>{
+    const name=nameIn.value.trim()||"Anonymous";
+    const text=textIn.value.trim();
+    if(!text){errMsg.textContent="Please enter a note.";errMsg.style.display="";return;}
+    saveBtn.disabled=true;saveBtn.textContent="Saving…";errMsg.style.display="none";
+    try{
+      const r=await fetch("api/notes/"+encodeURIComponent(panelId),{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,text})});
+      if(!r.ok)throw new Error();
+      textIn.value="";
+      // Reload notes
+      const updated=await fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json());
+      notesList.replaceChildren();
+      for(const n of updated){
+        const d=el("div",{class:"note-item"});
+        d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
+        d.append(el("p",{class:"note-text"},n.text));
+        notesList.append(d);
+      }
+    }catch{errMsg.textContent="Failed to save. Try again.";errMsg.style.display="";}
+    saveBtn.disabled=false;saveBtn.textContent="Save note";
+  };
+  const noteForm=el("div",{class:"note-form"},nameIn,textIn,errMsg,saveBtn);
+  notesWrap.append(noteForm);
+  info.replaceChildren(el("h3",null,panelId,close),dl,notesWrap);info.hidden=false;
   if(view3d){view3d.highlight(pidx);if(zoom&&pidx.length)view3d.focus(pidx);}
-  const ids=row?row.id:obj.aid;
-  for(const tr of $("tbody").children)if(tr.firstChild.textContent===ids)tr.classList.add("sel");
+  for(const tr of $("tbody").children)if(tr.firstChild.textContent===panelId)tr.classList.add("sel");
 }
 
 /* ---------- summary ---------- */
