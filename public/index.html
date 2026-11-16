@@ -380,8 +380,8 @@ function buildFilters(){
   const lvls=[...new Set([...scope.filter(r=>!F.cat||r.cat===F.cat).map(r=>r.level),...extra.filter(p=>!F.cat||p.cat===F.cat).map(p=>p.level)])].sort(natural);
   if(F.level&&!lvls.includes(F.level))F.level="";
   opts($("fLevel"),lvls,F.level,"All levels");
-  const st=ORDER.filter(s=>s===NOT_IN_TRACKER[0]||rowsAll.some(r=>r.status===s));
-  for(const r of rowsAll)if(!st.includes(r.status))st.push(r.status);
+  const st=ORDER.filter(s=>s!==NOT_IN_TRACKER[0]&&rowsAll.some(r=>r.status===s));
+  for(const r of rowsAll)if(!st.includes(r.status)&&r.status!==NOT_IN_TRACKER[0])st.push(r.status);
   buildStatusDrop(st);
 }
 function buildStatusDrop(st){
