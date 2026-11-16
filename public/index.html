@@ -133,6 +133,13 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .note-textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font-size:13px;resize:vertical;background:var(--panel);color:var(--ink);font-family:inherit}
 .note-save{align-self:flex-end}
 .note-err{font-size:12px;color:#c0392b;margin:0}
+.multi-sel-btn{appearance:none;background:var(--panel,#fff);border:1px solid var(--line,#ccc);border-radius:4px;padding:4px 8px;font-size:13px;cursor:pointer;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none}
+.multi-sel-btn:focus{outline:2px solid var(--accent,#1976d2);outline-offset:1px}
+.multi-sel-drop{position:absolute;top:calc(100% + 2px);left:0;z-index:200;background:var(--panel,#fff);border:1px solid var(--line,#ccc);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:200px;padding:6px 0;max-height:320px;overflow-y:auto}
+.multi-sel-drop label{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+.multi-sel-drop label:hover{background:var(--hover,rgba(0,0,0,.04))}
+.multi-sel-drop label input{margin:0;cursor:pointer}
+.multi-sel-drop .ms-swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}
 .note-replies{margin-top:8px;padding-left:12px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:6px}
 .note-reply{background:var(--hover,rgba(0,0,0,.03));border-radius:4px;padding:6px 8px}
 .note-reply-btn{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:4px 0 0;text-align:left}
@@ -184,7 +191,10 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
     <label for="fSub">Sub group<select id="fSub"></select></label>
     <label for="fCat">Element category<select id="fCat"></select></label>
     <label for="fLevel">Level<select id="fLevel"></select></label>
-    <label for="fStatus">Status<select id="fStatus"></select></label>
+    <label style="position:relative">Status
+      <div id="fStatusBtn" class="multi-sel-btn" tabindex="0">All statuses ▾</div>
+      <div id="fStatusDrop" class="multi-sel-drop" hidden></div>
+    </label>
     <label for="fSearch">Activity ID<input id="fSearch" type="search" placeholder="e.g. IG5-AT-ST" autocomplete="off"></label>
     <button class="btn" id="reset" type="button">Reset</button>
     <div class="uploads">
@@ -353,7 +363,7 @@ function loadTracker(rows,source){
 function panelStatus(p){return p.row?p.row.status:NOT_IN_TRACKER[0];}
 
 /* ---------- filters ---------- */
-const F={group:"",sub:"",cat:"",level:"",status:"",q:""};
+const F={group:"",sub:"",cat:"",level:"",statuses:new Set(),q:""};
 const natural=(a,b)=>a.localeCompare(b,undefined,{numeric:true});
 function opts(sel,values,cur,allLabel){sel.replaceChildren(el("option",{value:""},allLabel));for(const v of values){const o=el("option",{value:v},v);if(v===cur)o.selected=true;sel.append(o);}}
 function buildFilters(){
@@ -372,18 +382,39 @@ function buildFilters(){
   opts($("fLevel"),lvls,F.level,"All levels");
   const st=ORDER.filter(s=>s===NOT_IN_TRACKER[0]||rowsAll.some(r=>r.status===s));
   for(const r of rowsAll)if(!st.includes(r.status))st.push(r.status);
-  opts($("fStatus"),st,F.status,"All statuses");
+  buildStatusDrop(st);
 }
+function buildStatusDrop(st){
+  window._lastStatusList=st;
+  const btn=$("fStatusBtn"),drop=$("fStatusDrop");
+  drop.replaceChildren();
+  for(const s of st){
+    const lbl=document.createElement("label");
+    const cb=document.createElement("input");cb.type="checkbox";cb.value=s;cb.checked=F.statuses.has(s);
+    const sw=el("span",{class:"ms-swatch",style:"background:"+COLOR[s]});
+    lbl.append(cb,sw,s);
+    cb.onchange=()=>{if(cb.checked)F.statuses.add(s);else F.statuses.delete(s);updateStatusBtn();applyAll();};
+    drop.append(lbl);
+  }
+  updateStatusBtn();
+}
+function updateStatusBtn(){
+  const btn=$("fStatusBtn");
+  if(!F.statuses.size){btn.textContent="All statuses ▾";return;}
+  btn.textContent=[...F.statuses].join(", ")+" ▾";
+}
+// toggle dropdown open/close
+$("fStatusBtn").onclick=()=>{const d=$("fStatusDrop");d.hidden=!d.hidden;};
+document.addEventListener("click",e=>{if(!e.target.closest("label")&&!e.target.closest("#fStatusDrop")&&e.target!=$("fStatusBtn"))$("fStatusDrop").hidden=true;});
 function placePass(r){return(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub)&&(!F.cat||r.cat===F.cat)&&(!F.level||r.level===F.level)&&(!F.q||r.id.toUpperCase().includes(F.q));}
-function rowPass(r){return placePass(r)&&(!F.status||r.status===F.status);}
-function panelPass(p){if(p.row)return rowPass(p.row);return !F.group&&!F.sub&&(!F.cat||p.cat===F.cat)&&(!F.level||p.level===F.level)&&(!F.status||F.status===NOT_IN_TRACKER[0])&&(!F.q||p.aid.toUpperCase().includes(F.q));}
+function rowPass(r){return placePass(r)&&(!F.statuses.size||F.statuses.has(r.status));}
+function panelPass(p){if(p.row)return rowPass(p.row);return !F.group&&!F.sub&&(!F.cat||p.cat===F.cat)&&(!F.level||p.level===F.level)&&(!F.statuses.size||F.statuses.has(NOT_IN_TRACKER[0]))&&(!F.q||p.aid.toUpperCase().includes(F.q));}
 $("fGroup").onchange=e=>{F.group=e.target.value;F.sub="";buildFilters();applyAll();};
 $("fSub").onchange=e=>{F.sub=e.target.value;buildFilters();applyAll();};
 $("fCat").onchange=e=>{F.cat=e.target.value;buildFilters();applyAll();};
 $("fLevel").onchange=e=>{F.level=e.target.value;applyAll();};
-$("fStatus").onchange=e=>{F.status=e.target.value;applyAll();};
 let qT;$("fSearch").oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{F.q=e.target.value.trim().toUpperCase();applyAll();},180);};
-$("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.status=F.q="";$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
+$("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.q="";F.statuses=new Set();$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
 
 /* ---------- tabs ---------- */
 function showView(v){for(const b of document.querySelectorAll("nav.tabs button"))b.setAttribute("aria-selected",b.dataset.view===v);
@@ -480,9 +511,10 @@ function applyAll(){
   if(view3d)view3d.setVisible(p=>panelPass(p));
 }
 function drawLegend(counts){const L=$("legend");L.replaceChildren();for(const s of ORDER){if(!counts[s])continue;
-  const active=F.status===s;
-  const d=el("div",{style:"cursor:pointer;opacity:"+(F.status&&!active?".35":"1")+";outline:"+(active?"2px solid var(--ink)":"none")+";border-radius:4px;padding:1px 4px"},el("i",{class:"sw",style:"background:"+(F.status&&!active?"#aaa":COLOR[s])}),s);
-  d.onclick=()=>{F.status=active?"":s;$("fStatus").value=F.status;applyAll();};
+  const active=F.statuses.has(s);
+  const dim=F.statuses.size&&!active;
+  const d=el("div",{style:"cursor:pointer;opacity:"+(dim?".35":"1")+";outline:"+(active?"2px solid var(--ink)":"none")+";border-radius:4px;padding:1px 4px"},el("i",{class:"sw",style:"background:"+(dim?"#aaa":COLOR[s])}),s);
+  d.onclick=()=>{if(active)F.statuses.delete(s);else F.statuses.add(s);buildStatusDrop(window._lastStatusList||[]);applyAll();};
   L.append(d);}}
 function drawDonut(counts,total){
   const svg=$("donut");svg.replaceChildren();const NS="http://www.w3.org/2000/svg";const R=54,r=36,cx=66,cy=66;let a0=-Math.PI/2;
