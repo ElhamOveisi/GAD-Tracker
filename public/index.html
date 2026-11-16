@@ -391,8 +391,7 @@ function buildStatusDrop(st){
   for(const s of st){
     const lbl=document.createElement("label");
     const cb=document.createElement("input");cb.type="checkbox";cb.value=s;cb.checked=F.statuses.has(s);
-    const sw=el("span",{class:"ms-swatch",style:"background:"+COLOR[s]});
-    lbl.append(cb,sw,s);
+    lbl.append(cb,s);
     cb.onchange=()=>{if(cb.checked)F.statuses.add(s);else F.statuses.delete(s);updateStatusBtn();applyAll();};
     drop.append(lbl);
   }
