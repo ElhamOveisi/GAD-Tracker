@@ -384,6 +384,24 @@ async function api(req, res, p) {
     fs.writeFileSync(NOTES, JSON.stringify(all));
     return send(res, 200, { ok: true });
   }
+  // Reply to a note (no password required — just a name)
+  const replyPost = p.match(/^\/api\/notes\/(.+)\/reply\/(\d+)$/);
+  if (replyPost && req.method === "POST") {
+    const body = await readBody(req);
+    let data; try { data = JSON.parse(body); } catch { return send(res, 400, { error: "Bad JSON" }); }
+    const name = String(data.name || "").trim().slice(0, 80);
+    const text = String(data.text || "").trim().slice(0, 2000);
+    if (!name) return send(res, 400, { error: "Name is required." });
+    if (!text) return send(res, 400, { error: "Reply text is required." });
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    const id = replyPost[1];
+    const idx = parseInt(replyPost[2], 10);
+    if (!all[id] || !all[id][idx]) return send(res, 404, { error: "Note not found." });
+    if (!all[id][idx].replies) all[id][idx].replies = [];
+    all[id][idx].replies.push({ name, text, at: new Date().toISOString() });
+    fs.writeFileSync(NOTES, JSON.stringify(all));
+    return send(res, 200, { ok: true });
+  }
   // Panel notes — read open to all, write requires name+password
   const noteGet = p.match(/^\/api\/notes\/(.+)$/);
   if (noteGet && req.method === "GET") {

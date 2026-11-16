@@ -133,6 +133,11 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .note-textarea{width:100%;box-sizing:border-box;padding:6px 8px;border:1px solid var(--line);border-radius:5px;font-size:13px;resize:vertical;background:var(--panel);color:var(--ink);font-family:inherit}
 .note-save{align-self:flex-end}
 .note-err{font-size:12px;color:#c0392b;margin:0}
+.note-replies{margin-top:8px;padding-left:12px;border-left:2px solid var(--line);display:flex;flex-direction:column;gap:6px}
+.note-reply{background:var(--hover,rgba(0,0,0,.03));border-radius:4px;padding:6px 8px}
+.note-reply-btn{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;padding:4px 0 0;text-align:left}
+.note-reply-btn:hover{color:var(--ink)}
+.note-reply-form{flex-direction:column;gap:4px;margin-top:6px;padding-left:12px;border-left:2px solid var(--line)}
 .checks{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));gap:12px}
 .checks .card p{margin:0 0 8px;color:var(--muted);font-size:13px;max-width:65ch}
 .count{font:600 13px var(--font-ui);background:var(--soft);border-radius:10px;padding:1px 8px;margin-left:6px;color:var(--ink)}
@@ -401,14 +406,26 @@ async function loadAllNotes(){
     if(notesAdminKey)cols.push("");
     const tbl=el("table",{style:"width:100%;border-collapse:collapse;font-size:13px"});
     tbl.append(el("tr",null,...cols.map(h=>el("th",{style:"text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap"},h))));
+    const fmtT=t=>new Date(t).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
     for(const n of flat){
       const textCell=el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"},n.text);
       if(n.editedAt)textCell.append(el("span",{style:"font-size:11px;color:var(--muted);margin-left:6px"},"(edited)"));
+      // replies snippet in text cell
+      if(n.replies&&n.replies.length){
+        const rWrap=el("div",{style:"margin-top:6px;padding-left:8px;border-left:2px solid var(--line)"});
+        for(const rp of n.replies){
+          const rDiv=el("div",{style:"font-size:12px;margin-bottom:4px"});
+          rDiv.append(el("span",{style:"font-weight:600;margin-right:6px"},rp.name),el("span",{style:"color:var(--muted)"},fmtT(rp.at)));
+          rDiv.append(el("p",{style:"margin:2px 0 0;white-space:pre-wrap;word-break:break-word"},rp.text));
+          rWrap.append(rDiv);
+        }
+        textCell.append(rWrap);
+      }
       const tr=el("tr",{style:"border-bottom:1px solid var(--line)"},
         el("td",{style:"padding:6px 10px;white-space:nowrap;font-weight:600;cursor:pointer"},n.id),
         textCell,
         el("td",{style:"padding:6px 10px;white-space:nowrap"},n.name),
-        el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
+        el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},fmtT(n.at)));
       tr.firstChild.onclick=()=>{const r=rowsAll.find(x=>x.id===n.id);if(r){showView("model");select(r,true);}};
       if(notesAdminKey){
         const editBtn=el("button",{type:"button",class:"btn",style:"font-size:11px;padding:2px 8px;margin-right:4px"},"Edit");
@@ -531,16 +548,52 @@ function select(obj,zoom){
   const textIn=el("textarea",{placeholder:"Add a note…",class:"note-textarea",maxlength:"2000",rows:"3"});
   const saveBtn=el("button",{type:"button",class:"btn note-save"},"Save note");
   const errMsg=el("p",{class:"note-err",style:"display:none"});
+  const fmtTime=t=>new Date(t).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
   const reloadNotes=async()=>{
     const updated=await fetch("api/notes/"+encodeURIComponent(panelId)).then(r=>r.json());
     notesList.replaceChildren();
     if(!updated.length){notesList.append(el("p",{class:"notes-empty"},"No notes yet."));}
-    else{for(const n of updated){
+    else{updated.forEach((n,ni)=>{
       const d=el("div",{class:"note-item"});
-      d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},new Date(n.at).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"})));
+      d.append(el("span",{class:"note-author"},n.name),el("span",{class:"note-time"},fmtTime(n.at)));
       d.append(el("p",{class:"note-text"},n.text));
+      // replies
+      if(n.replies&&n.replies.length){
+        const rl=el("div",{class:"note-replies"});
+        for(const rp of n.replies){
+          const rd=el("div",{class:"note-reply"});
+          rd.append(el("span",{class:"note-author"},rp.name),el("span",{class:"note-time"},fmtTime(rp.at)));
+          rd.append(el("p",{class:"note-text"},rp.text));
+          rl.append(rd);
+        }
+        d.append(rl);
+      }
+      // reply toggle
+      const replyBtn=el("button",{type:"button",class:"note-reply-btn"},"↩ Reply");
+      const replyForm=el("div",{class:"note-reply-form",style:"display:none"});
+      const rNameIn=el("input",{type:"text",placeholder:"Your name",class:"note-name",maxlength:"80"});
+      const rTextIn=el("textarea",{placeholder:"Write a reply…",class:"note-textarea",maxlength:"2000",rows:"2"});
+      const rSendBtn=el("button",{type:"button",class:"btn note-save"},"Send");
+      const rErr=el("p",{class:"note-err",style:"display:none"});
+      replyForm.append(rNameIn,rTextIn,rErr,rSendBtn);
+      replyBtn.onclick=()=>{replyForm.style.display=replyForm.style.display==="none"?"flex":"none";if(replyForm.style.display!=="none")rNameIn.focus();};
+      rSendBtn.onclick=async()=>{
+        const name=rNameIn.value.trim();const text=rTextIn.value.trim();
+        if(!name){rErr.textContent="Please enter your name.";rErr.style.display="";return;}
+        if(!text){rErr.textContent="Please enter a reply.";rErr.style.display="";return;}
+        rSendBtn.disabled=true;rSendBtn.textContent="Sending…";rErr.style.display="none";
+        try{
+          const r=await fetch("api/notes/"+encodeURIComponent(panelId)+"/reply/"+ni,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({name,text})});
+          const data=await r.json();
+          if(!r.ok){rErr.textContent=data.error||"Failed.";rErr.style.display="";rSendBtn.disabled=false;rSendBtn.textContent="Send";return;}
+          rTextIn.value="";replyForm.style.display="none";
+          await reloadNotes();
+        }catch{rErr.textContent="Failed. Try again.";rErr.style.display="";}
+        rSendBtn.disabled=false;rSendBtn.textContent="Send";
+      };
+      d.append(replyBtn,replyForm);
       notesList.append(d);
-    }}
+    });}
   };
   saveBtn.onclick=async()=>{
     const name=nameSelect.value;
