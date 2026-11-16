@@ -136,7 +136,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
 .multi-sel-btn{appearance:none;background:var(--panel,#fff);border:1px solid var(--line,#ccc);border-radius:4px;padding:4px 8px;font-size:13px;cursor:pointer;min-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;user-select:none}
 .multi-sel-btn:focus{outline:2px solid var(--accent,#1976d2);outline-offset:1px}
 .multi-sel-drop{position:absolute;top:calc(100% + 2px);left:0;z-index:200;background:var(--panel,#fff);border:1px solid var(--line,#ccc);border-radius:6px;box-shadow:0 4px 16px rgba(0,0,0,.12);min-width:200px;padding:6px 0;max-height:320px;overflow-y:auto}
-.multi-sel-drop label{display:flex;align-items:center;gap:8px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
+.multi-sel-drop label{display:flex;flex-direction:row;align-items:center;gap:8px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap}
 .multi-sel-drop label:hover{background:var(--hover,rgba(0,0,0,.04))}
 .multi-sel-drop label input{margin:0;cursor:pointer}
 .multi-sel-drop .ms-swatch{width:12px;height:12px;border-radius:3px;flex-shrink:0}
@@ -391,6 +391,7 @@ function buildStatusDrop(st){
   for(const s of st){
     const lbl=document.createElement("label");
     const cb=document.createElement("input");cb.type="checkbox";cb.value=s;cb.checked=F.statuses.has(s);
+    lbl.style.cssText="display:flex;flex-direction:row;align-items:center;gap:8px;padding:5px 12px;font-size:13px;cursor:pointer;white-space:nowrap";
     lbl.append(cb,s);
     cb.onchange=()=>{if(cb.checked)F.statuses.add(s);else F.statuses.delete(s);updateStatusBtn();applyAll();};
     drop.append(lbl);
