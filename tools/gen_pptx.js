@@ -44,8 +44,40 @@ async function applyTheme(pptxPath, theme) {
 }
 
 // ── LOAD TRACKER ──────────────────────────────────────────────────────────
-const tracker = JSON.parse(fs.readFileSync(trackerPath, 'utf8'));
-const rows = tracker.rows || [];
+// tracker.json is an array of arrays: [group, sub, desc, type, id, sqm, status]
+const raw = JSON.parse(fs.readFileSync(trackerPath, 'utf8'));
+// Support both array-of-arrays and array-of-objects (or {rows:[...]})
+function parseRows(raw) {
+  const data = Array.isArray(raw) ? raw : (raw.rows || []);
+  if (!data.length) return [];
+  if (Array.isArray(data[0])) {
+    // array-of-arrays: [group, sub, desc, type, id, sqm, status]
+    return data.map(r => ({
+      group: r[0] || '',
+      sub:   r[1] || '',
+      sqm:   +r[5] || 0,
+      status: (r[6] || '').trim(),
+    }));
+  }
+  // array-of-objects
+  return data.map(r => ({
+    group:  r.group  || r[0] || '',
+    sub:    r.sub    || r[1] || '',
+    sqm:    +(r.sqm  || r.area || r[5]) || 0,
+    status: (r.status || r[6] || '').trim(),
+  }));
+}
+
+function normStatus(s) {
+  s = (s || '').trim();
+  if (!s) return 'No status';
+  // case-insensitive match to known statuses
+  const known = Object.keys(STATUS_COLOR);
+  const m = known.find(k => k.toLowerCase() === s.toLowerCase());
+  return m || s;
+}
+
+const rows = parseRows(raw);
 
 // Status colors (must match dashboard)
 const STATUS_COLOR = {
@@ -55,21 +87,23 @@ const STATUS_COLOR = {
   'Released for fabr':  'e91e8c',
   'Delivery to bond':   'e8892b',
   'Fabricated':         'f1c40f',
+  'Late airfreight':    'f48fb1',
   'Broken':             'c8423b',
+  'No status':          '7a5a48',
 };
 const STATUS_ORDER = Object.keys(STATUS_COLOR);
 
-// Aggregate by status
+// Aggregate by status (normalise case)
 const byStatus = {};
 for (const r of rows) {
-  const s = r.status || 'Unknown';
+  const s = normStatus(r.status);
   if (!byStatus[s]) byStatus[s] = { n: 0, sqm: 0 };
   byStatus[s].n++;
-  byStatus[s].sqm += (r.area || 0);
+  byStatus[s].sqm += r.sqm;
 }
 
 const TOTAL     = rows.length;
-const TOTAL_SQM = rows.reduce((a, r) => a + (r.area || 0), 0);
+const TOTAL_SQM = rows.reduce((a, r) => a + r.sqm, 0);
 
 // Build ordered status list (known first, then others)
 const STATUSES = [];
@@ -80,16 +114,15 @@ for (const [s, v] of Object.entries(byStatus)) {
   if (!STATUS_COLOR[s]) STATUSES.push({ label: s, ...v, color: '888888' });
 }
 
-// Aggregate by group (level field = group name in tracker)
+// Aggregate by group (col 0 in tracker = group name e.g. Staircase, Bridge…)
 const byGroup = {};
 for (const r of rows) {
-  const g = r.group || r.level || 'Other';
+  const g = r.group || 'Other';
   if (!byGroup[g]) byGroup[g] = 0;
   byGroup[g]++;
 }
 const GROUPS = Object.entries(byGroup)
   .sort((a, b) => b[1] - a[1])
-  .slice(0, 5)
   .map(([label, n]) => ({ label, n }));
 
 const GP_COLORS = ['00C6A7', '2980b9', '9b59b6', 'e8892b', '7FB3C8'];
@@ -222,36 +255,43 @@ sl.addText(pct(installed.n)+'%', { x:10.5, y:BAR_Y-0.22, w:2.4, h:0.2, fontSize:
 const TBL_X=0.35, TBL_Y=3.46;
 sl.addText('STATUS BREAKDOWN', { x:TBL_X, y:TBL_Y, w:7.5, h:0.22, fontSize:8, bold:true, color:'7FB3C8', charSpacing:1.5, fontFace:'Calibri', isTextBox:true, margin:0 });
 
-STATUSES.slice(0, 7).forEach((s, i) => {
-  const rowY = TBL_Y + 0.28 + i * 0.49;
+// Dynamic row height: fit all statuses between TBL_Y+0.28 and footer (7.10)
+const ROW_H = Math.min(0.49, (7.10 - TBL_Y - 0.28) / Math.max(STATUSES.length, 1));
+STATUSES.forEach((s, i) => {
+  const rowY = TBL_Y + 0.28 + i * ROW_H;
   const barMaxW = 5.4;
   const barW = Math.max(0.05, barMaxW * s.n / TOTAL);
+  const dotOff = ROW_H * 0.22;
+  const bgH = ROW_H - 0.03;
 
-  sl.addShape(pres.ShapeType.rect, { x:TBL_X, y:rowY-0.04, w:7.5, h:0.46, fill:{color: i%2===0 ? '0E1829':'111B30'}, line:{color:'1A2340',width:0} });
-  sl.addShape(pres.ShapeType.ellipse, { x:TBL_X+0.1, y:rowY+0.11, w:0.18, h:0.18, fill:{color:s.color}, line:{color:s.color,width:0} });
-  sl.addText(s.label, { x:TBL_X+0.38, y:rowY, w:1.6, h:0.38, fontSize:11, color:'FFFFFF', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
-  sl.addShape(pres.ShapeType.rect, { x:TBL_X+2.0, y:rowY+0.12, w:barMaxW, h:0.14, fill:{color:'1A2340'}, line:{color:'1A2340',width:0} });
-  sl.addShape(pres.ShapeType.rect, { x:TBL_X+2.0, y:rowY+0.12, w:barW, h:0.14, fill:{color:s.color}, line:{color:s.color,width:0} });
-  sl.addText(fmt(s.n), { x:TBL_X+7.0, y:rowY, w:0.5, h:0.38, fontSize:11, bold:true, color:'FFFFFF', align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
-  sl.addText(pct(s.n)+'%', { x:TBL_X+7.52, y:rowY, w:0.6, h:0.38, fontSize:11, color:'7FB3C8', align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
-  sl.addText(fmtSqm(s.sqm)+' m²', { x:TBL_X+8.14, y:rowY, w:1.1, h:0.38, fontSize:10, color:'7FB3C8', italic:true, align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
+  sl.addShape(pres.ShapeType.rect, { x:TBL_X, y:rowY-0.02, w:7.5, h:bgH, fill:{color: i%2===0 ? '0E1829':'111B30'}, line:{color:'1A2340',width:0} });
+  sl.addShape(pres.ShapeType.ellipse, { x:TBL_X+0.1, y:rowY+dotOff, w:0.17, h:0.17, fill:{color:s.color}, line:{color:s.color,width:0} });
+  sl.addText(s.label, { x:TBL_X+0.36, y:rowY, w:1.62, h:ROW_H-0.04, fontSize:10.5, color:'FFFFFF', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
+  sl.addShape(pres.ShapeType.rect, { x:TBL_X+2.0, y:rowY+dotOff+0.01, w:barMaxW, h:0.12, fill:{color:'1A2340'}, line:{color:'1A2340',width:0} });
+  sl.addShape(pres.ShapeType.rect, { x:TBL_X+2.0, y:rowY+dotOff+0.01, w:barW, h:0.12, fill:{color:s.color}, line:{color:s.color,width:0} });
+  sl.addText(fmt(s.n), { x:TBL_X+7.0, y:rowY, w:0.5, h:ROW_H-0.04, fontSize:10.5, bold:true, color:'FFFFFF', align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
+  sl.addText(pct(s.n)+'%', { x:TBL_X+7.52, y:rowY, w:0.6, h:ROW_H-0.04, fontSize:10.5, color:'7FB3C8', align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
+  sl.addText(fmtSqm(s.sqm)+' m²', { x:TBL_X+8.14, y:rowY, w:1.1, h:ROW_H-0.04, fontSize:9.5, color:'7FB3C8', italic:true, align:'right', fontFace:'Calibri', isTextBox:true, margin:0, valign:'middle' });
 });
 
 // ── GROUP BREAKDOWN ────────────────────────────────────────────────────────
 const GP_X=9.9, GP_Y=3.46;
 sl.addText('BY STRUCTURE', { x:GP_X, y:GP_Y, w:3.05, h:0.22, fontSize:8, bold:true, color:'7FB3C8', charSpacing:1.5, fontFace:'Calibri', isTextBox:true, margin:0 });
 
+const GP_ROW_H = Math.min(0.63, (7.10 - GP_Y - 0.28) / Math.max(GROUPS.length, 1));
 GROUPS.forEach((g, i) => {
-  const gy = GP_Y + 0.28 + i * 0.63;
+  const gy = GP_Y + 0.28 + i * GP_ROW_H;
   const barW = 2.8 * g.n / TOTAL;
-  const col = GP_COLORS[i] || '7FB3C8';
+  const col = GP_COLORS[i % GP_COLORS.length];
+  const labelH = GP_ROW_H * 0.42;
 
-  sl.addShape(pres.ShapeType.rect, { x:GP_X, y:gy-0.02, w:3.05, h:0.59, fill:{color: i%2===0 ? '0E1829':'111B30'}, line:{color:'1A2340',width:0} });
-  sl.addText(g.label, { x:GP_X+0.1, y:gy, w:1.7, h:0.26, fontSize:11, color:'FFFFFF', fontFace:'Calibri', isTextBox:true, margin:0 });
-  sl.addText(fmt(g.n)+' panels', { x:GP_X+0.1, y:gy+0.24, w:1.7, h:0.2, fontSize:9, color:'7FB3C8', fontFace:'Calibri', isTextBox:true, margin:0 });
-  sl.addText(pct(g.n)+'%', { x:GP_X+2.5, y:gy, w:0.5, h:0.26, fontSize:11, bold:true, color:col, align:'right', fontFace:'Calibri', isTextBox:true, margin:0 });
-  sl.addShape(pres.ShapeType.rect, { x:GP_X+0.1, y:gy+0.47, w:2.8, h:0.07, fill:{color:'1A2340'}, line:{color:'1A2340',width:0} });
-  sl.addShape(pres.ShapeType.rect, { x:GP_X+0.1, y:gy+0.47, w:Math.max(0.03,barW), h:0.07, fill:{color:col}, line:{color:col,width:0} });
+  sl.addShape(pres.ShapeType.rect, { x:GP_X, y:gy-0.02, w:3.05, h:GP_ROW_H-0.04, fill:{color: i%2===0 ? '0E1829':'111B30'}, line:{color:'1A2340',width:0} });
+  sl.addText(g.label, { x:GP_X+0.1, y:gy, w:1.7, h:labelH, fontSize:11, color:'FFFFFF', fontFace:'Calibri', isTextBox:true, margin:0 });
+  sl.addText(fmt(g.n)+' panels', { x:GP_X+0.1, y:gy+labelH, w:1.7, h:labelH, fontSize:9, color:'7FB3C8', fontFace:'Calibri', isTextBox:true, margin:0 });
+  sl.addText(pct(g.n)+'%', { x:GP_X+2.5, y:gy, w:0.5, h:labelH, fontSize:11, bold:true, color:col, align:'right', fontFace:'Calibri', isTextBox:true, margin:0 });
+  const barY = gy + GP_ROW_H - 0.18;
+  sl.addShape(pres.ShapeType.rect, { x:GP_X+0.1, y:barY, w:2.8, h:0.07, fill:{color:'1A2340'}, line:{color:'1A2340',width:0} });
+  sl.addShape(pres.ShapeType.rect, { x:GP_X+0.1, y:barY, w:Math.max(0.03,barW), h:0.07, fill:{color:col}, line:{color:col,width:0} });
 });
 
 // Divider
