@@ -176,13 +176,32 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
       <h1>GAD Glass Works Tracker</h1>
       <div class="stamp" id="stamp"></div>
       <div style="margin-top:6px">
-        <a id="dlReport" href="/api/report/pptx" download
-          style="display:inline-flex;align-items:center;gap:6px;background:var(--accent,#00C6A7);color:#0A0F1E;font:600 12px var(--font-ui,system-ui);padding:5px 12px;border-radius:5px;text-decoration:none;transition:opacity .15s"
-          onmouseover="this.style.opacity='.82'" onmouseout="this.style.opacity='1'">
+        <button id="dlReport" type="button"
+          style="display:inline-flex;align-items:center;gap:6px;background:#fff;color:#0A0F1E;border:none;font:600 12px var(--font-ui,system-ui);padding:5px 12px;border-radius:5px;cursor:pointer;transition:opacity .15s"
+          onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M2 10h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
           Download Status Report
-        </a>
+        </button>
       </div>
+      <script>
+        document.getElementById('dlReport').addEventListener('click', async function() {
+          this.textContent = 'Generating…';
+          this.disabled = true;
+          try {
+            const r = await fetch('/api/report/pptx');
+            if (!r.ok) throw new Error('Server error ' + r.status);
+            const blob = await r.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            const today = new Date().toISOString().slice(0,10);
+            a.href = url; a.download = 'GAD_Glass_Status_' + today + '.pptx';
+            document.body.appendChild(a); a.click();
+            document.body.removeChild(a); URL.revokeObjectURL(url);
+          } catch(e) { alert('Could not generate report: ' + e.message); }
+          this.innerHTML = '<svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 1v7M3.5 5.5l3 3 3-3M2 10h9" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg> Download Status Report';
+          this.disabled = false;
+        });
+      </script>
     </div>
     <div class="logos">
       <span class="tile"><img src="img/logo-wsp.png" alt="WSP"></span>
