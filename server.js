@@ -337,6 +337,37 @@ async function api(req, res, p) {
     const info = saveTracker(old.rows, { source: old.info.source, by: "restore", method: "restore", restoredFrom: m[1] });
     return send(res, 200, { ok: true, info });
   }
+  // Generate and download the status report as PPTX
+  if (p === "/api/report/pptx" && req.method === "GET") {
+    const trackerSrc = fs.existsSync(CURRENT) ? CURRENT : BUNDLED_TRACKER;
+    const tmpOut = path.join(require("os").tmpdir(), `gad_report_${Date.now()}.pptx`);
+    const imgDir = path.join(PUBLIC, "img");
+    const script = path.join(__dirname, "tools", "gen_pptx.js");
+    const child = require("child_process").spawn(
+      process.execPath, [script, trackerSrc, tmpOut, imgDir],
+      { stdio: ["ignore", "pipe", "pipe"] }
+    );
+    let stderr = "";
+    child.stderr.on("data", d => { stderr += d; });
+    child.on("close", code => {
+      if (code !== 0 || !fs.existsSync(tmpOut)) {
+        console.error("gen_pptx error:", stderr);
+        return send(res, 500, { error: "Could not generate report." });
+      }
+      const buf = fs.readFileSync(tmpOut);
+      fs.rmSync(tmpOut, { force: true });
+      const today = new Date().toISOString().slice(0, 10);
+      res.writeHead(200, {
+        "Content-Type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "Content-Disposition": `attachment; filename="GAD_Glass_Status_${today}.pptx"`,
+        "Content-Length": buf.length,
+        "Cache-Control": "no-store",
+      });
+      res.end(buf);
+    });
+    return; // response sent inside callback
+  }
+
   // Notes user list (names only, no passwords)
   if (p === "/api/notes-users" && req.method === "GET") {
     return send(res, 200, NOTES_USERS.map(u => u.name));
