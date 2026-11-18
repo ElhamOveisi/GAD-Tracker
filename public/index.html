@@ -460,17 +460,19 @@ async function loadAllNotes(){
     const flat=[];for(const [id,notes] of entries)for(let i=0;i<notes.length;i++)flat.push({id,idx:i,...notes[i]});
     flat.sort((a,b)=>b.at.localeCompare(a.at));
     wrap.replaceChildren();
-    const cols=["Panel ID","Note","Author","Date / Time"];
+    const cols=["Panel ID","Note","Author","Date / Time","Status"];
     if(notesAdminKey)cols.push("");
     const tbl=el("table",{style:"width:100%;border-collapse:collapse;font-size:13px"});
     tbl.append(el("tr",null,...cols.map(h=>el("th",{style:"text-align:left;padding:6px 10px;border-bottom:2px solid var(--line);white-space:nowrap"},h))));
     const fmtT=t=>new Date(t).toLocaleString("en-GB",{day:"2-digit",month:"short",year:"numeric",hour:"2-digit",minute:"2-digit"});
     for(const n of flat){
-      const textCell=el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"},n.text);
+      const isClosed=!!n.closed;
+      const rowStyle="border-bottom:1px solid var(--line)"+(isClosed?";opacity:0.55":"");
+      const textCell=el("td",{style:"padding:6px 10px;white-space:pre-wrap;word-break:break-word;max-width:400px"+(isClosed?";text-decoration:line-through;color:var(--muted)":"")},n.text);
       if(n.editedAt)textCell.append(el("span",{style:"font-size:11px;color:var(--muted);margin-left:6px"},"(edited)"));
       // replies snippet in text cell
       if(n.replies&&n.replies.length){
-        const rWrap=el("div",{style:"margin-top:6px;padding-left:8px;border-left:2px solid var(--line)"});
+        const rWrap=el("div",{style:"margin-top:6px;padding-left:8px;border-left:2px solid var(--line);text-decoration:none"});
         for(const rp of n.replies){
           const rDiv=el("div",{style:"font-size:12px;margin-bottom:4px"});
           rDiv.append(el("span",{style:"font-weight:600;margin-right:6px"},rp.name),el("span",{style:"color:var(--muted)"},fmtT(rp.at)));
@@ -479,11 +481,27 @@ async function loadAllNotes(){
         }
         textCell.append(rWrap);
       }
-      const tr=el("tr",{style:"border-bottom:1px solid var(--line)"},
+      // Status cell with Close button or Closed badge
+      let statusCell;
+      if(isClosed){
+        const badge=el("span",{style:"display:inline-block;background:#2e9e5b;color:#fff;font-size:11px;font-weight:600;padding:2px 8px;border-radius:4px;white-space:nowrap"},"✓ Closed");
+        if(n.closedAt){badge.title="Closed "+fmtT(n.closedAt);}
+        statusCell=el("td",{style:"padding:6px 10px;white-space:nowrap"},badge);
+      }else{
+        const closeBtn=el("button",{type:"button",class:"btn",style:"font-size:11px;padding:2px 8px;background:transparent;color:var(--muted);border:1px solid var(--muted)"},"Mark Closed");
+        closeBtn.onclick=async()=>{
+          if(!confirm("Mark this note as closed (responded with clear action)?"))return;
+          const r=await fetch("api/notes/"+encodeURIComponent(n.id)+"/close/"+n.idx,{method:"POST"});
+          if(r.ok)loadAllNotes();else alert("Failed: "+(await r.json()).error);
+        };
+        statusCell=el("td",{style:"padding:4px 10px;white-space:nowrap"},closeBtn);
+      }
+      const tr=el("tr",{style:rowStyle},
         el("td",{style:"padding:6px 10px;white-space:nowrap;font-weight:600;cursor:pointer"},n.id),
         textCell,
         el("td",{style:"padding:6px 10px;white-space:nowrap"},n.name),
-        el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},fmtT(n.at)));
+        el("td",{style:"padding:6px 10px;white-space:nowrap;color:var(--muted)"},fmtT(n.at)),
+        statusCell);
       tr.firstChild.onclick=()=>{const r=rowsAll.find(x=>x.id===n.id);if(r){showView("model");select(r,true);}};
       if(notesAdminKey){
         const editBtn=el("button",{type:"button",class:"btn",style:"font-size:11px;padding:2px 8px;margin-right:4px"},"Edit");

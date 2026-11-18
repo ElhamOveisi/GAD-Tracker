@@ -416,6 +416,18 @@ async function api(req, res, p) {
     return send(res, 200, { ok: true });
   }
   // Reply to a note (no password required — just a name)
+  // Close a note (mark as responded with clear action) — no auth required
+  const closeNote = p.match(/^\/api\/notes\/(.+)\/close\/(\d+)$/);
+  if (closeNote && req.method === "POST") {
+    const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
+    const id = closeNote[1];
+    const idx = parseInt(closeNote[2], 10);
+    if (!all[id] || !all[id][idx]) return send(res, 404, { error: "Note not found." });
+    all[id][idx].closed = true;
+    all[id][idx].closedAt = new Date().toISOString();
+    fs.writeFileSync(NOTES, JSON.stringify(all));
+    return send(res, 200, { ok: true });
+  }
   const replyPost = p.match(/^\/api\/notes\/(.+)\/reply\/(\d+)$/);
   if (replyPost && req.method === "POST") {
     const body = await readBody(req);
