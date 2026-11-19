@@ -372,7 +372,7 @@ function loadTracker(rows,source){
   TRACKER=rows; SOURCE=source;
   // Rows are matched on a normalised Activity ID: case, dash variants and spaces don't matter.
   const byId=new Map();
-  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:String(r[4]).trim(),sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],model:[]};
+  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:String(r[4]).trim(),sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],bondingLocation:(r[7]||"").trim(),model:[]};
     o.key=normId(o.id);if(!byId.has(o.key))byId.set(o.key,[]);byId.get(o.key).push(o);return o;});
   // meta: [activity id, lift, GUID, model area, (unused), level, STJV_1D_Element_Category]
   panels=META.map((m,i)=>{const p={aid:m[0],note:m[1],guid:m[2],area:m[3],level:m[5]||"",cat:(m[6]||"").toUpperCase(),row:null,idx:i};
@@ -603,7 +603,7 @@ function select(obj,zoom){
   const dl=el("dl");
   const add=(k,v)=>{if(v!=null&&v!=="")dl.append(el("dt",null,k),el("dd",null,v));};
   add("Status",el("span",{class:"pill"},el("i",{style:"background:"+COLOR[st]}),st));
-  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Category",row.cat+(row.catFromTracker?" (from tracker)":""));add("Level",row.level);add("Area",row.sqm.toFixed(3)+" m²");}
+  if(row){add("Group",row.group);add("Sub group",row.sub);add("Element",row.desc);add("Category",row.cat+(row.catFromTracker?" (from tracker)":""));add("Level",row.level);add("Area",row.sqm.toFixed(3)+" m²");add("Bonding location",row.bondingLocation||null);}
   else if(p){add("Category",p.cat);add("Level",p.level);if(p.area)add("Area",p.area.toFixed(3)+" m²");}
   if(p){add("IFC GUID",p.guid);}
   else add("In model","No — not found in the IFC");
