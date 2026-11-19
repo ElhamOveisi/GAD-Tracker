@@ -221,7 +221,7 @@ function receiveIFC(req, res) {
 function validRows(rows) {
   if (!Array.isArray(rows) || !rows.length || rows.length > 200000) return false;
   return rows.every(
-    (r) => Array.isArray(r) && r.length === 7 && typeof r[4] === "string" && r[4].trim() && typeof r[5] === "number" &&
+    (r) => Array.isArray(r) && (r.length === 7 || r.length === 9) && typeof r[4] === "string" && r[4].trim() && typeof r[5] === "number" &&
       r.every((v, i) => (i === 5 ? Number.isFinite(v) : typeof v === "string" && v.length < 500))
   );
 }

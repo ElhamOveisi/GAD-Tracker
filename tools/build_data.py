@@ -66,15 +66,16 @@ def tracker(xlsx):
         return -1
     iId, iSt, iSq = find('activity id'), find('status'), find('sqm', 'area')
     iG, iD, iT = find('full name', 'group'), find('description'), find('type')
+    iBond = find('bonding location', 'bonding loc', 'bond location')
     iS = 2
     if iId < 0 or iSt < 0: sys.exit('Tracker: could not find the Activity ID and Status columns in row 1')
-    g = lambda r, i: '' if i < 0 or r[i] is None else str(r[i]).strip()
+    g = lambda r, i: '' if i < 0 or i >= len(r) or r[i] is None else str(r[i]).strip()
     out = []
     for r in rows[1:]:
         if not g(r, iId): continue
         try: sqm = round(float(r[iSq] or 0), 3)
         except (TypeError, ValueError): sqm = 0
-        out.append([g(r, iG), g(r, iS), g(r, iD), g(r, iT), g(r, iId), sqm, g(r, iSt)])
+        out.append([g(r, iG), g(r, iS), g(r, iD), g(r, iT), g(r, iId), sqm, g(r, iSt), '', g(r, iBond)])
     json.dump(out, open(os.path.join(OUT, 'tracker.json'), 'w'), separators=(',', ':'))
     return len(out)
 
