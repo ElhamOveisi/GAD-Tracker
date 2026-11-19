@@ -372,7 +372,7 @@ function loadTracker(rows,source){
   TRACKER=rows; SOURCE=source;
   // Rows are matched on a normalised Activity ID: case, dash variants and spaces don't matter.
   const byId=new Map();
-  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:String(r[4]).trim(),sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],bondingLocation:(r[7]||"").trim(),model:[]};
+  rowsAll=rows.map((r,i)=>{const o={group:r[0]||"(no group)",sub:r[1]||"",desc:r[2]||"",type:r[3]||"",id:String(r[4]).trim(),sqm:+r[5]||0,status:normStatus(r[6]),raw:r[6],bondingLocation:(r[8]||"").trim(),model:[]};
     o.key=normId(o.id);if(!byId.has(o.key))byId.set(o.key,[]);byId.get(o.key).push(o);return o;});
   // meta: [activity id, lift, GUID, model area, (unused), level, STJV_1D_Element_Category]
   panels=META.map((m,i)=>{const p={aid:m[0],note:m[1],guid:m[2],area:m[3],level:m[5]||"",cat:(m[6]||"").toUpperCase(),row:null,idx:i};
