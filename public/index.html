@@ -222,6 +222,7 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
       <div id="fStatusBtn" class="multi-sel-btn" tabindex="0">All statuses ▾</div>
       <div id="fStatusDrop" class="multi-sel-drop" hidden></div>
     </label>
+    <label for="fBond">Bonding location<select id="fBond"></select></label>
     <label for="fSearch">Activity ID<input id="fSearch" type="search" placeholder="e.g. IG5-AT-ST" autocomplete="off"></label>
     <button class="btn" id="reset" type="button">Reset</button>
     <div class="uploads">
@@ -390,7 +391,7 @@ function loadTracker(rows,source){
 function panelStatus(p){return p.row?p.row.status:NOT_IN_TRACKER[0];}
 
 /* ---------- filters ---------- */
-const F={group:"",sub:"",cat:"",level:"",statuses:new Set(),q:""};
+const F={group:"",sub:"",cat:"",level:"",bond:"",statuses:new Set(),q:""};
 const natural=(a,b)=>a.localeCompare(b,undefined,{numeric:true});
 function opts(sel,values,cur,allLabel){sel.replaceChildren(el("option",{value:""},allLabel));for(const v of values){const o=el("option",{value:v},v);if(v===cur)o.selected=true;sel.append(o);}}
 function buildFilters(){
@@ -407,6 +408,9 @@ function buildFilters(){
   const lvls=[...new Set([...scope.filter(r=>!F.cat||r.cat===F.cat).map(r=>r.level),...extra.filter(p=>!F.cat||p.cat===F.cat).map(p=>p.level)])].sort(natural);
   if(F.level&&!lvls.includes(F.level))F.level="";
   opts($("fLevel"),lvls,F.level,"All levels");
+  const bonds=[...new Set(rowsAll.filter(r=>r.bondingLocation).map(r=>r.bondingLocation))].sort(natural);
+  if(F.bond&&!bonds.includes(F.bond))F.bond="";
+  opts($("fBond"),bonds,F.bond,"All locations");
   const st=ORDER.filter(s=>s!==NOT_IN_TRACKER[0]&&rowsAll.some(r=>r.status===s));
   for(const r of rowsAll)if(!st.includes(r.status)&&r.status!==NOT_IN_TRACKER[0])st.push(r.status);
   buildStatusDrop(st);
@@ -433,15 +437,16 @@ function updateStatusBtn(){
 // toggle dropdown open/close
 $("fStatusBtn").onclick=()=>{const d=$("fStatusDrop");d.hidden=!d.hidden;};
 document.addEventListener("click",e=>{if(!e.target.closest("label")&&!e.target.closest("#fStatusDrop")&&e.target!=$("fStatusBtn"))$("fStatusDrop").hidden=true;});
-function placePass(r){return(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub)&&(!F.cat||r.cat===F.cat)&&(!F.level||r.level===F.level)&&(!F.q||r.id.toUpperCase().includes(F.q));}
+function placePass(r){return(!F.group||r.group===F.group)&&(!F.sub||r.sub===F.sub)&&(!F.cat||r.cat===F.cat)&&(!F.level||r.level===F.level)&&(!F.bond||r.bondingLocation===F.bond)&&(!F.q||r.id.toUpperCase().includes(F.q));}
 function rowPass(r){return placePass(r)&&(!F.statuses.size||F.statuses.has(r.status));}
 function panelPass(p){if(p.row)return rowPass(p.row);return !F.group&&!F.sub&&(!F.cat||p.cat===F.cat)&&(!F.level||p.level===F.level)&&(!F.statuses.size||F.statuses.has(NOT_IN_TRACKER[0]))&&(!F.q||p.aid.toUpperCase().includes(F.q));}
 $("fGroup").onchange=e=>{F.group=e.target.value;F.sub="";buildFilters();applyAll();};
 $("fSub").onchange=e=>{F.sub=e.target.value;buildFilters();applyAll();};
 $("fCat").onchange=e=>{F.cat=e.target.value;buildFilters();applyAll();};
 $("fLevel").onchange=e=>{F.level=e.target.value;applyAll();};
+$("fBond").onchange=e=>{F.bond=e.target.value;applyAll();};
 let qT;$("fSearch").oninput=e=>{clearTimeout(qT);qT=setTimeout(()=>{F.q=e.target.value.trim().toUpperCase();applyAll();},180);};
-$("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.q="";F.statuses=new Set();$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
+$("reset").onclick=()=>{F.group=F.sub=F.cat=F.level=F.bond=F.q="";F.statuses=new Set();$("fSearch").value="";select(null);buildFilters();applyAll();view3d&&view3d.fit();};
 
 /* ---------- tabs ---------- */
 function showView(v){for(const b of document.querySelectorAll("nav.tabs button"))b.setAttribute("aria-selected",b.dataset.view===v);
