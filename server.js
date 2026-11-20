@@ -50,7 +50,8 @@ try { NOTES_USERS = JSON.parse(process.env.NOTES_USERS || "[]"); } catch {}
 if (!NOTES_USERS.length) NOTES_USERS = [
   {name:"Elham",password:"GAD26"},{name:"David",password:"PD@1"},{name:"Chris",password:"PD@2"},
   {name:"Ammar",password:"CM1"},{name:"Mahmoud",password:"CM11"},{name:"Raziq",password:"QS1"},
-  {name:"Shakeeb",password:"QC11"},{name:"Badr",password:"PM1"},{name:"Maxime",password:"PM11"}
+  {name:"Shakeeb",password:"QC11"},{name:"Badr",password:"PM1"},{name:"Maxime",password:"PM11"},
+  {name:"Khaled",password:"CM22"},{name:"Islam",password:"SI1"}
 ];
 
 const TYPES = {
