@@ -261,9 +261,15 @@ tbody tr.sel{background:color-mix(in srgb,var(--focus) 18%,transparent)}
       <div class="card sumbar-card">
         <div class="sumhead">
           <h2 style="margin:0">Where the panels are</h2>
-          <div class="seg" role="group" aria-label="Measure">
-            <button type="button" id="mCount" aria-pressed="true">Panels</button>
-            <button type="button" id="mArea" aria-pressed="false">m²</button>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div class="seg" role="group" aria-label="Measure">
+              <button type="button" id="mCount" aria-pressed="true">Panels</button>
+              <button type="button" id="mArea" aria-pressed="false">m²</button>
+            </div>
+            <div class="seg" role="group" aria-label="Breakdown">
+              <button type="button" id="bSub" aria-pressed="true">Sub-group</button>
+              <button type="button" id="bCat" aria-pressed="false">Category</button>
+            </div>
           </div>
         </div>
         <div class="bigbar" id="bigbar"></div>
@@ -702,9 +708,11 @@ function select(obj,zoom){
 }
 
 /* ---------- summary ---------- */
-let measure="count"; const openGroups=new Set();
+let measure="count"; let breakdown="sub"; const openGroups=new Set();
 $("mCount").onclick=()=>{measure="count";$("mCount").setAttribute("aria-pressed","true");$("mArea").setAttribute("aria-pressed","false");drawSummary();};
 $("mArea").onclick=()=>{measure="area";$("mArea").setAttribute("aria-pressed","true");$("mCount").setAttribute("aria-pressed","false");drawSummary();};
+$("bSub").onclick=()=>{breakdown="sub";$("bSub").setAttribute("aria-pressed","true");$("bCat").setAttribute("aria-pressed","false");drawSummary();};
+$("bCat").onclick=()=>{breakdown="cat";$("bCat").setAttribute("aria-pressed","true");$("bSub").setAttribute("aria-pressed","false");drawSummary();};
 function agg(rows){const o={n:0,a:0,s:{}};for(const r of rows){const v=measure==="count"?1:r.sqm;o.n+=v;o.s[r.status]=(o.s[r.status]||0)+v;o.a+=r.sqm;}return o;}
 function fmtV(v){return measure==="count"?fmt(Math.round(v)):fmt(Math.round(v));}
 function minibar(o){const d=el("div",{class:"minibar"});for(const s of ORDER){const v=o.s[s]||0;if(v)d.append(el("div",{style:`width:${pct(v,o.n)}%;background:${COLOR[s]}`,title:`${s}: ${p1(pct(v,o.n))}`}));}return d;}
@@ -730,8 +738,15 @@ function drawSummary(){
     const tog=()=>{openGroups.has(g)?openGroups.delete(g):openGroups.add(g);drawSummary();};
     tr.firstChild.onclick=tog;tr.firstChild.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();tog();}};
     mb.append(tr);
-    if(open){const subs=[...new Set(gr.map(r=>r.sub))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
-      for(const s of subs)mb.append(line(s,agg(gr.filter(r=>r.sub===s)),"sub"));}}
+    if(open){
+      if(breakdown==="sub"){
+        const subs=[...new Set(gr.map(r=>r.sub))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true}));
+        for(const s of subs)mb.append(line(s,agg(gr.filter(r=>r.sub===s)),"sub"));
+      }else{
+        const cats=[...new Set(gr.map(r=>r.cat))].sort(natural);
+        for(const c of cats)mb.append(line(c,agg(gr.filter(r=>r.cat===c)),"sub"));
+      }
+    }}
   mb.append(line(el("b",null,"All shown"),tot,"grp"));
 }
 
