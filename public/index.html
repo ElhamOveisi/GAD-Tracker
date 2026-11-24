@@ -630,7 +630,9 @@ function select(obj,zoom){
   // Add note form
   const nameSelect=el("select",{class:"note-name"});
   nameSelect.append(el("option",{value:""},"— Select your name —"));
+  const noPasswordUsers=new Set(["Islam","Mahmoud"]);
   fetch("api/notes-users").then(r=>r.json()).then(names=>{for(const n of names)nameSelect.append(el("option",{value:n},n));}).catch(()=>{});
+  nameSelect.addEventListener("change",()=>{passIn.style.display=noPasswordUsers.has(nameSelect.value)?"none":"";});
   const passIn=el("input",{type:"password",placeholder:"Your password",class:"note-name",maxlength:"80"});
   const textIn=el("textarea",{placeholder:"Add a note…",class:"note-textarea",maxlength:"2000",rows:"3"});
   const saveBtn=el("button",{type:"button",class:"btn note-save"},"Save note");
@@ -687,7 +689,7 @@ function select(obj,zoom){
     const password=passIn.value.trim();
     const text=textIn.value.trim();
     if(!name){errMsg.textContent="Please select your name.";errMsg.style.display="";return;}
-    if(!password){errMsg.textContent="Please enter your password.";errMsg.style.display="";return;}
+    if(!password&&!noPasswordUsers.has(name)){errMsg.textContent="Please enter your password.";errMsg.style.display="";return;}
     if(!text){errMsg.textContent="Please enter a note.";errMsg.style.display="";return;}
     saveBtn.disabled=true;saveBtn.textContent="Saving…";errMsg.style.display="none";
     try{

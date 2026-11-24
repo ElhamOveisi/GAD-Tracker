@@ -49,9 +49,9 @@ try { NOTES_USERS = JSON.parse(process.env.NOTES_USERS || "[]"); } catch {}
 // Fallback hardcoded users (overridden by NOTES_USERS env var if set)
 if (!NOTES_USERS.length) NOTES_USERS = [
   {name:"Elham",password:"GAD26"},{name:"David",password:"PD@1"},{name:"Chris",password:"PD@2"},
-  {name:"Ammar",password:"CM1"},{name:"Mahmoud",password:"CM11"},{name:"Raziq",password:"QS1"},
+  {name:"Ammar",password:"CM1"},{name:"Mahmoud",password:""},{name:"Raziq",password:"QS1"},
   {name:"Shakeeb",password:"QC11"},{name:"Badr",password:"PM1"},{name:"Maxime",password:"PM11"},
-  {name:"Khaled",password:"CM22"},{name:"Islam",password:"SI1"}
+  {name:"Khaled",password:"CM22"},{name:"Islam",password:""}
 ];
 
 const TYPES = {
@@ -460,7 +460,7 @@ async function api(req, res, p) {
     const password = String(data.password || "").trim();
     const text = String(data.text || "").trim().slice(0, 2000);
     if (!text) return send(res, 400, { error: "Note text is required." });
-    const user = NOTES_USERS.find(u => u.name === name && u.password === password);
+    const user = NOTES_USERS.find(u => u.name === name && (u.password === "" || u.password === password));
     if (!user) return send(res, 401, { error: "Wrong name or password." });
     const all = fs.existsSync(NOTES) ? readJSON(NOTES) : {};
     const id = notePost[1];
