@@ -387,9 +387,9 @@ function loadTracker(rows,source){
     // lifts share IDs across P1-P4: prefer the row in the panel's own lift, then any row not yet matched
     p.row=cands.find(r=>m[1]&&r.sub===m[1]&&!r.model.length)||cands.find(r=>!r.model.length&&(!m[1]||!LIFT_SUBS.has(r.sub)))||cands.find(r=>m[1]&&r.sub===m[1])||cands[0]||null;
     if(p.row)p.row.model.push(i); return p;});
-  // Category: STJV_1D_Element_Category from the model; where blank, the tracker's Description
+  // Category: always use Description from the tracker (cleaned up), never the model's element category
   const descCat=d=>(d||"").replace(/\s*\(B\)\s*$/i,"").trim().toUpperCase()||"(no category)";
-  for(const r of rowsAll){const p=r.model.length?panels[r.model[0]]:null;r.level=p?(p.level||"(no level)"):"Not in model";r.cat=p&&p.cat?p.cat:descCat(r.desc);r.catFromTracker=!(p&&p.cat);}
+  for(const r of rowsAll){const p=r.model.length?panels[r.model[0]]:null;r.level=p?(p.level||"(no level)"):"Not in model";r.cat=descCat(r.desc);r.catFromTracker=true;}
   for(const p of panels)if(!p.row){if(!p.level)p.level="(no level)";if(!p.cat)p.cat="(no category)";}
   $("srcnote").textContent=source;
   buildFilters(); applyAll();
